@@ -68,7 +68,7 @@ namespace MelonLoader
 
         // TO-DO: Remove this
         public static unsafe bool IsGame32Bit() =>
-#if X64
+#if X64 || ARM64
             false;
 #else
             true;

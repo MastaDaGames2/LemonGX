@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Runtime.InteropServices;
 
 
@@ -52,7 +52,7 @@ internal static unsafe class BootstrapInterop
 
     public static void NativeHookAttach(nint target, nint detour)
     {
-#if NET6_0_OR_GREATER
+#if NET6_0_OR_GREATER && !ANDROID // CoreCLR-only check; Android runs .NET on Mono
         // SanityCheckDetour is able to wrap and fix the bad method in a delegate where possible, so we pass the detour by ref.
         // Herp: Wine/Proton are missing the PssCaptureSnapshot export from kernel32.dll so we skip CoreClrDelegateFixer.SanityCheckDetour under that runtime
         if (!MelonUtils.IsUnderWineOrSteamProton()

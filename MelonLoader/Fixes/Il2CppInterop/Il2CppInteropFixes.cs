@@ -1,4 +1,4 @@
-﻿#if NET6_0_OR_GREATER
+#if NET6_0_OR_GREATER
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -166,51 +166,59 @@ namespace MelonLoader.Fixes.Il2CppInterop
                 _rewriteGlobalContext_GetNewAssemblyForOriginal_Prefix = thisType.GetMethod(nameof(RewriteGlobalContext_GetNewAssemblyForOriginal_Prefix), BindingFlags.NonPublic | BindingFlags.Static);
                 _rewriteGlobalContext_TryGetNewTypeForOriginal_Prefix = thisType.GetMethod(nameof(RewriteGlobalContext_TryGetNewTypeForOriginal_Prefix), BindingFlags.NonPublic | BindingFlags.Static);
 
-                MelonDebug.Msg("Patching Il2CppInterop ClassInjector.RegisterTypeInIl2Cpp...");
-                Core.HarmonyInstance.Patch(_registerTypeInIl2Cpp,
+                #if !ANDROID
+                TryPatch("Il2CppInterop ClassInjector.RegisterTypeInIl2Cpp", () => Core.HarmonyInstance.Patch(_registerTypeInIl2Cpp,
                     null,
                     null,
-                    new HarmonyMethod(_registerTypeInIl2Cpp_Transpiler));
+                    new HarmonyMethod(_registerTypeInIl2Cpp_Transpiler)));
+#endif
 
-                MelonDebug.Msg("Patching Il2CppInterop ClassInjector.IsTypeSupported...");
-                Core.HarmonyInstance.Patch(_isTypeSupported,
+                TryPatch("Il2CppInterop ClassInjector.IsTypeSupported", () => Core.HarmonyInstance.Patch(_isTypeSupported,
                     null,
                     null,
-                    new HarmonyMethod(_isTypeSupported_Transpiler));
+                    new HarmonyMethod(_isTypeSupported_Transpiler)));
 
-                MelonDebug.Msg("Patching Il2CppInterop ClassInjector.RewriteType...");
-                Core.HarmonyInstance.Patch(_rewriteType,
-                    new HarmonyMethod(_rewriteType_Prefix));
+                TryPatch("Il2CppInterop ClassInjector.RewriteType", () => Core.HarmonyInstance.Patch(_rewriteType,
+                    new HarmonyMethod(_rewriteType_Prefix)));
 
-                MelonDebug.Msg("Patching Il2CppInterop ClassInjector.ConvertMethodInfo...");
-                Core.HarmonyInstance.Patch(_convertMethodInfo,
+                TryPatch("Il2CppInterop ClassInjector.ConvertMethodInfo", () => Core.HarmonyInstance.Patch(_convertMethodInfo,
                     null,
                     null,
-                    new HarmonyMethod(_convertMethodInfo_Transpiler));
+                    new HarmonyMethod(_convertMethodInfo_Transpiler)));
 
-                MelonDebug.Msg("Patching Il2CppInterop ILGeneratorEx.EmitObjectToPointer...");
-                Core.HarmonyInstance.Patch(_emitObjectToPointer,
-                    new HarmonyMethod(_emitObjectToPointer_Prefix));
+                TryPatch("Il2CppInterop ILGeneratorEx.EmitObjectToPointer", () => Core.HarmonyInstance.Patch(_emitObjectToPointer,
+                    new HarmonyMethod(_emitObjectToPointer_Prefix)));
 
-                MelonDebug.Msg("Patching Il2CppInterop RewriteGlobalContext.AddAssemblyContext...");
-                Core.HarmonyInstance.Patch(_rewriteGlobalContext_AddAssemblyContext,
-                    null, new HarmonyMethod(_rewriteGlobalContext_AddAssemblyContext_Postfix));
+                TryPatch("Il2CppInterop RewriteGlobalContext.AddAssemblyContext", () => Core.HarmonyInstance.Patch(_rewriteGlobalContext_AddAssemblyContext,
+                    null, new HarmonyMethod(_rewriteGlobalContext_AddAssemblyContext_Postfix)));
 
-                MelonDebug.Msg("Patching Il2CppInterop RewriteGlobalContext.Dispose...");
-                Core.HarmonyInstance.Patch(_rewriteGlobalContext_Dispose,
-                    new HarmonyMethod(_rewriteGlobalContext_Dispose_Prefix));
+                TryPatch("Il2CppInterop RewriteGlobalContext.Dispose", () => Core.HarmonyInstance.Patch(_rewriteGlobalContext_Dispose,
+                    new HarmonyMethod(_rewriteGlobalContext_Dispose_Prefix)));
 
-                MelonDebug.Msg("Patching Il2CppInterop RewriteGlobalContext.GetNewAssemblyForOriginal...");
-                Core.HarmonyInstance.Patch(_rewriteGlobalContext_GetNewAssemblyForOriginal,
-                    new HarmonyMethod(_rewriteGlobalContext_GetNewAssemblyForOriginal_Prefix));
+                TryPatch("Il2CppInterop RewriteGlobalContext.GetNewAssemblyForOriginal", () => Core.HarmonyInstance.Patch(_rewriteGlobalContext_GetNewAssemblyForOriginal,
+                    new HarmonyMethod(_rewriteGlobalContext_GetNewAssemblyForOriginal_Prefix)));
 
-                MelonDebug.Msg("Patching Il2CppInterop RewriteGlobalContext.TryGetNewTypeForOriginal...");
-                Core.HarmonyInstance.Patch(_rewriteGlobalContext_TryGetNewTypeForOriginal,
-                    new HarmonyMethod(_rewriteGlobalContext_TryGetNewTypeForOriginal_Prefix));
+                TryPatch("Il2CppInterop RewriteGlobalContext.TryGetNewTypeForOriginal", () => Core.HarmonyInstance.Patch(_rewriteGlobalContext_TryGetNewTypeForOriginal,
+                    new HarmonyMethod(_rewriteGlobalContext_TryGetNewTypeForOriginal_Prefix)));
             }
             catch (Exception e)
             {
                 MelonLogger.Error(e);
+            }
+        }
+
+
+        // Applies one patch; a failure is logged without stopping the others
+        private static void TryPatch(string name, Action patch)
+        {
+            MelonDebug.Msg($"Patching {name}...");
+            try
+            {
+                patch();
+            }
+            catch (Exception e)
+            {
+                MelonLogger.Error($"Failed to patch {name}: {e}");
             }
         }
 

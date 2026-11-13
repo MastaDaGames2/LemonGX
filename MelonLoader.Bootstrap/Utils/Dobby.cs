@@ -15,6 +15,9 @@ public static partial class Dobby
 
     public static nint HookAttach(nint target, nint detour)
     {
+#if ANDROID
+        target = ResolveBranchThunk(target);
+#endif
         nint original = 0;
         if (Hook(target, detour, ref original) != 0)
         {
@@ -22,6 +25,33 @@ public static partial class Dobby
         }
         return original;
     }
+
+#if ANDROID
+    /// <summary>
+    /// Newer Unity builds export il2cpp's API as a table of single-instruction stubs (<c>b real_function</c>) packed
+    /// next to each other. Dobby overwrites 16 bytes at the target, which would clobber the neighbouring stubs, so hook
+    /// the function the stub jumps to instead.
+    /// </summary>
+    internal static unsafe nint ResolveBranchThunk(nint address)
+    {
+        for (var i = 0; i < 4 && address != 0; i++)
+        {
+            var instruction = *(uint*)address;
+
+            // B imm26 (unconditional branch, no link)
+            if ((instruction & 0xFC000000) != 0x14000000)
+                break;
+
+            long offset = instruction & 0x03FFFFFF;
+            if ((offset & 0x02000000) != 0)
+                offset -= 0x04000000;
+
+            address += (nint)(offset * 4);
+        }
+
+        return address;
+    }
+#endif
 
     public static void HookDetach(nint target)
     {

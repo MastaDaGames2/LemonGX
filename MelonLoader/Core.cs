@@ -168,7 +168,9 @@ namespace MelonLoader
 
             Fixes.Il2CppInterop.Il2CppInteropFixes.Install();
             //Fixes.Il2CppInterop.Il2CppInteropIl2CppObjectBaseFix.Install();
+#if !ANDROID // LemonLoader's Il2CppInterop picks the Unity 6 hooks itself, and patching it early needs Il2Cppmscorlib
             Fixes.Il2CppInterop.Il2CppInteropInjectorHelpersSetupFix.Install();
+#endif
             Fixes.Il2CppInterop.Il2CppInteropGetFieldDefaultValueFix.Install();
             Fixes.Il2CppInterop.Il2CppICallInjector.Install();
 
@@ -268,7 +270,11 @@ namespace MelonLoader
             MelonLogger.MsgDirect("------------------------------");
             var typeString = MelonUtils.IsGameIl2Cpp() ? "Il2cpp" : MelonUtils.IsOldMono() ? "Mono" : "MonoBleedingEdge";
             MelonLogger.MsgDirect($"Game Type: {typeString}");
+#if ARM64
+            var archString = "arm64";
+#else
             var archString = MelonUtils.IsGame32Bit() ? "x86" : "x64";
+#endif
             MelonLogger.MsgDirect($"Game Arch: {archString}");
             MelonLogger.MsgDirect("------------------------------");
             MelonLogger.MsgDirect("Command-Line: ");
