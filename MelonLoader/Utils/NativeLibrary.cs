@@ -78,8 +78,20 @@ namespace MelonLoader
 
             return dlopen(name, RTLD_NOW);
 #elif ANDROID
+            // Reuse a library that is already loaded (e.g. the game's libil2cpp.so). Loading a copy of it from another
+            // path would create a second, separate instance of that library.
+            IntPtr loaded = dlopen(name, RTLD_NOW | RTLD_NOLOAD);
+            if (loaded == IntPtr.Zero)
+                loaded = dlopen(Path.GetFileName(name), RTLD_NOW | RTLD_NOLOAD);
+            if (loaded != IntPtr.Zero)
+                return loaded;
+
             string path = name;
-            if (File.Exists(path))
+            // Android refuses to load code from shared storage, so libraries from there (e.g. a mod's native
+            // dependencies) are copied into the app's private folder first. Libraries elsewhere load in place.
+            bool onSharedStorage = path.StartsWith("/storage/", StringComparison.Ordinal)
+                                   || path.StartsWith("/sdcard/", StringComparison.Ordinal);
+            if (onSharedStorage && File.Exists(path))
             {
                 // bypasses android security that blocks people from loading native libs from anywhere
                 string fileName = Path.GetFileName(path);
@@ -135,7 +147,8 @@ namespace MelonLoader
         [DllImport("libdl.so")]
         protected static extern IntPtr dlerror();
 
-        const int RTLD_NOW = 2; // for dlopen's flags 
+        const int RTLD_NOW = 2; // for dlopen's flags
+        const int RTLD_NOLOAD = 4; // bionic: only return a handle if the library is already loaded
 #elif OSX
         [DllImport("libSystem.B.dylib")]
         protected static extern IntPtr dlopen(string filename, int flags);
