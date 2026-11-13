@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
         <TargetFrameworks>$(MonoTarget);$(MonoBleedingEdgeTarget);$(DotNetTarget)</TargetFrameworks>
         <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
@@ -16,6 +16,8 @@
     <PropertyGroup Condition="'$(IsAndroidBuild)' == 'true'">
         <!-- Android only runs il2cpp games through .NET -->
         <TargetFrameworks>$(DotNetTarget)</TargetFrameworks>
+        <!-- The .NET runtime bundled for Android is newer than net6 -->
+        <RollForward>Major</RollForward>
     </PropertyGroup>
     <ItemDefinitionGroup Condition="$(IsNuGetPack) != 'true'">
         <PackageReference>

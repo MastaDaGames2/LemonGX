@@ -58,6 +58,23 @@ public static class AndroidBootstrap
         Directory.CreateDirectory(cacheDir);
         LibcNative.Setenv("TMPDIR", cacheDir, true);
 
+        // .NET's OpenSSL layer needs to be told where Android keeps its CA certificates (for HTTPS downloads)
+        foreach (var certDir in new[] { "/apex/com.android.conscrypt/cacerts", "/system/etc/security/cacerts" })
+        {
+            try
+            {
+                if (Directory.Exists(certDir) && Directory.EnumerateFiles(certDir).Any())
+                {
+                    LibcNative.Setenv("SSL_CERT_DIR", certDir, true);
+                    break;
+                }
+            }
+            catch
+            {
+                // Not readable from this app; try the next one
+            }
+        }
+
         EnsureStoragePermission();
         Directory.CreateDirectory(BaseDir);
 

@@ -386,3 +386,6 @@ x64
 *.o
 *.obj
 *.kate-swp
+
+# Android build tools (build-android.ps1)
+.android-build/
