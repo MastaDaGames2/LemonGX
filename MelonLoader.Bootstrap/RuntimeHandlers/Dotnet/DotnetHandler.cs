@@ -44,6 +44,10 @@ internal static class DotnetHandler
         // The installer bundles a .NET runtime for linux-bionic in the APK, which AndroidBootstrap extracts.
         // MelonLoader targets net6 while that runtime is newer, so allow rolling forward to it.
         LibcNative.Setenv("DOTNET_ROLL_FORWARD", "Major", true);
+        // Il2CppInterop and the ICall injector let il2cpp call straight into JIT-compiled managed code, without the
+        // transition wrappers Mono's cooperative/hybrid thread-state tracking expects; that aborts with "Cannot
+        // transition thread ... from STATE_BLOCKING". Preemptive suspend doesn't track those states.
+        LibcNative.Setenv("MONO_THREADS_SUSPEND", "preemptive", true);
         if (LoaderConfig.Current.Loader.DebugMode)
         {
             LibcNative.Setenv("COREHOST_TRACE", "1", true);
