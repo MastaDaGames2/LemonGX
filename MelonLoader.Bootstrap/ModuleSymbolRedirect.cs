@@ -69,6 +69,10 @@ namespace MelonLoader.Bootstrap
             // Use the real (un-interposed) dlsym so MelonLoader resolves the
             // genuine runtime exports, not its own dlsym detours.
             return RealDlsym(handle, symbolName);
+#elif ANDROID
+            // Nothing is redirected on Android, so a plain lookup is enough
+            string? name = Marshal.PtrToStringAnsi(symbolName);
+            return name != null && NativeLibrary.TryGetExport(handle, name, out var address) ? address : nint.Zero;
 #else
             return nint.Zero;
 #endif
