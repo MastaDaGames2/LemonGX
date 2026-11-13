@@ -1,4 +1,4 @@
-﻿using System.Runtime.CompilerServices;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
 namespace MelonLoader.Bootstrap.Utils;
@@ -17,6 +17,7 @@ public static partial class Dobby
     {
 #if ANDROID
         target = ResolveBranchThunk(target);
+        EnsureLongEnoughToHook(target);
 #endif
         nint original = 0;
         if (Hook(target, detour, ref original) != 0)
@@ -50,6 +51,21 @@ public static partial class Dobby
         }
 
         return address;
+    }
+
+    // Dobby overwrites the first 16 bytes (4 instructions). If the function returns or jumps away before that, the
+    // patch would spill into whatever follows it in memory.
+    private static unsafe void EnsureLongEnoughToHook(nint address)
+    {
+        for (var i = 0; i < 3; i++)
+        {
+            var instruction = ((uint*)address)[i];
+            var isReturn = (instruction & 0xFFFFFC1F) == 0xD65F0000; // RET
+            var isBranch = (instruction & 0xFC000000) == 0x14000000  // B imm26
+                           || (instruction & 0xFFFFFC1F) == 0xD61F0000; // BR Xn
+            if (isReturn || isBranch)
+                throw new InvalidOperationException($"Function at 0x{address:X} is too short to hook safely");
+        }
     }
 #endif
 

@@ -150,6 +150,9 @@ public static class AndroidProxy
             return false;
         }
 
+        // Before Unity runs: redirect its il2cpp lookups to MelonLoader
+        ModuleSymbolRedirect.AttachToUnity(libUnity);
+
         if (!NativeFunc.GetExport<JNI_OnLoadFunc>(libUnity, "JNI_OnLoad", out var jniOnLoad))
         {
             LogError("libunity.so has no JNI_OnLoad export");

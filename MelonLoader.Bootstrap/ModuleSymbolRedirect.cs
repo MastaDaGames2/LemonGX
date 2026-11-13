@@ -1,4 +1,4 @@
-﻿using MelonLoader.Bootstrap.RuntimeHandlers.Il2Cpp;
+using MelonLoader.Bootstrap.RuntimeHandlers.Il2Cpp;
 using MelonLoader.Bootstrap.RuntimeHandlers.Mono;
 using MelonLoader.Bootstrap.Utils;
 using System.Runtime.CompilerServices;
@@ -26,9 +26,8 @@ namespace MelonLoader.Bootstrap
             IntPtr detourPtr = Marshal.GetFunctionPointerForDelegate(DetourDelegate);
 
 #if ANDROID
-            // Unity on Android loads il2cpp itself; hook its exports directly instead of redirecting libunity's lookups
-            if (Il2CppHandler.AttachAndroidHooks())
-                MelonDebug.Log("Symbol Redirect Attached!");
+            // libunity.so isn't loaded yet; AndroidProxy calls AttachToUnity once it is, before Unity starts
+            _androidAttachPending = true;
             return;
 #elif OSX
             // plthook cannot patch UnityPlayer.dylib's GOT on modern macOS
@@ -53,13 +52,44 @@ namespace MelonLoader.Bootstrap
             MelonDebug.Log("Symbol Redirect Attached!");
         }
 
+#if ANDROID
+        private static bool _androidAttachPending;
+
+        /// <summary>
+        /// Redirects libunity.so's dlsym lookups of the il2cpp API, the same way MelonLoader does on desktop Linux.
+        /// No code inside il2cpp is patched, which matters on Unity 6.3: its il2cpp exports are often only a few
+        /// instructions long, too small to inline-hook without corrupting their neighbours.
+        /// </summary>
+        internal static void AttachToUnity(nint libUnityHandle)
+        {
+            if (!_androidAttachPending)
+                return;
+            _androidAttachPending = false;
+
+            if (Proxy.Android.AndroidPltHook.Replace(libUnityHandle, "dlsym", Marshal.GetFunctionPointerForDelegate(DetourDelegate)))
+            {
+                Core.Logger.Msg("Redirecting libunity.so's il2cpp lookups");
+                return;
+            }
+
+            Core.Logger.Warning("Could not redirect libunity.so's dlsym; hooking il2cpp directly instead");
+            Il2CppHandler.AttachAndroidHooks();
+        }
+#endif
+
         internal static nint GetSymbol(nint handle, string symbolName)
             => GetSymbol(handle, Marshal.StringToHGlobalAnsi(symbolName));
         private static nint GetSymbol(nint handle, nint symbolName)
         {
+#if ANDROID
+            // libunity also looks things up with RTLD_DEFAULT (0), which must keep working
+            if (symbolName == nint.Zero)
+                return nint.Zero;
+#else
             if ((handle == nint.Zero)
                 || (symbolName == nint.Zero))
                 return nint.Zero;
+#endif
 
 #if WINDOWS
             return GetProcAddress(handle, symbolName);
@@ -70,9 +100,7 @@ namespace MelonLoader.Bootstrap
             // genuine runtime exports, not its own dlsym detours.
             return RealDlsym(handle, symbolName);
 #elif ANDROID
-            // Nothing is redirected on Android, so a plain lookup is enough
-            string? name = Marshal.PtrToStringAnsi(symbolName);
-            return name != null && NativeLibrary.TryGetExport(handle, name, out var address) ? address : nint.Zero;
+            return LibcNative.DlsymRaw(handle, symbolName);
 #else
             return nint.Zero;
 #endif

@@ -71,6 +71,10 @@ internal partial class LibcNative
     public static partial int Fileno(nint stream);
 
 #if ANDROID
+    [LibraryImport("libdl", EntryPoint = "dlsym")]
+    [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
+    public static partial nint DlsymRaw(nint handle, nint symbol);
+
     [LibraryImport("libc", EntryPoint = "pthread_self")]
     [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
     public static partial nuint PthreadSelf();

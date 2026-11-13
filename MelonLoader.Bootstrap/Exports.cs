@@ -1,4 +1,4 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using MelonLoader.Bootstrap.Logging;
 using MelonLoader.Bootstrap.RuntimeHandlers.Mono;
 using MelonLoader.Bootstrap.Utils;
@@ -218,7 +218,16 @@ internal static class Exports
     [UnmanagedCallersOnly(EntryPoint = "NativeHookAttach")]
     public static unsafe void NativeHookAttach(nint* target, nint detour)
     {
-        *target = Dobby.HookAttach(*target, detour);
+        // An exception must not escape into native code. On failure *target is left as is, so callers that use it as
+        // the "original" keep calling the real function.
+        try
+        {
+            *target = Dobby.HookAttach(*target, detour);
+        }
+        catch (Exception ex)
+        {
+            Core.Logger.Error($"Failed to hook 0x{*target:X}: {ex.Message}");
+        }
     }
     [UnmanagedCallersOnly(EntryPoint = "NativeHookDetach")]
     public static unsafe void NativeHookDetach(nint* target, nint detour)
