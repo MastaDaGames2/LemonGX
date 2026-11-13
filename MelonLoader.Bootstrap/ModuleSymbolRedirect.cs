@@ -66,9 +66,11 @@ namespace MelonLoader.Bootstrap
                 return;
             _androidAttachPending = false;
 
-            if (Proxy.Android.AndroidPltHook.Replace(libUnityHandle, "dlsym", Marshal.GetFunctionPointerForDelegate(DetourDelegate)))
+            if (NativeLibrary.TryGetExport(libUnityHandle, "JNI_OnLoad", out var addressInUnity)
+                && Proxy.Android.AndroidPltHook.Replace(addressInUnity, "dlsym", Marshal.GetFunctionPointerForDelegate(DetourDelegate)))
             {
                 Core.Logger.Msg("Redirecting libunity.so's il2cpp lookups");
+                Proxy.Android.BootLog.Write("Redirecting libunity.so's il2cpp lookups (no il2cpp code is patched)");
                 return;
             }
 

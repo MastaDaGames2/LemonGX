@@ -222,7 +222,13 @@ internal static class Exports
         // the "original" keep calling the real function.
         try
         {
+#if ANDROID
+            var requested = *target;
+#endif
             *target = Dobby.HookAttach(*target, detour);
+#if ANDROID
+            Proxy.Android.BootLog.Write($"Hooked {Proxy.Android.NativeInfo.DescribeAddress(requested)}");
+#endif
         }
         catch (Exception ex)
         {

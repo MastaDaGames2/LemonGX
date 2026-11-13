@@ -33,6 +33,9 @@ internal static class Il2CppHandler
 
     public static void Initialize(nint handle)
     {
+#if ANDROID
+        Proxy.Android.BootLog.Write($"libil2cpp.so is loaded at {Proxy.Android.NativeInfo.DescribeAddress(NativeLibrary.TryGetExport(handle, "il2cpp_init", out var init) ? init : 0)}");
+#endif
         var il2cppLib = Il2CppLib.TryLoad(handle);
         if (il2cppLib is null)
         {

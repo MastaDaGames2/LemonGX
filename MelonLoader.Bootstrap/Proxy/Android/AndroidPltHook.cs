@@ -9,9 +9,11 @@ namespace MelonLoader.Bootstrap.Proxy.Android;
 /// </summary>
 internal static partial class AndroidPltHook
 {
-    [LibraryImport("*", EntryPoint = "plthook_open_by_handle")]
+    // plthook_open_by_handle relies on dlinfo(RTLD_DI_LINKMAP), which bionic doesn't support; open by an address
+    // inside the library instead
+    [LibraryImport("*", EntryPoint = "plthook_open_by_address")]
     [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
-    private static partial int PlthookOpenByHandle(out nint plthook, nint handle);
+    private static partial int PlthookOpenByAddress(out nint plthook, nint address);
 
     [LibraryImport("*", EntryPoint = "plthook_replace", StringMarshalling = StringMarshalling.Utf8)]
     [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
@@ -25,11 +27,12 @@ internal static partial class AndroidPltHook
     [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
     private static partial nint PlthookError();
 
-    public static bool Replace(nint libraryHandle, string function, nint replacement)
+    /// <param name="addressInLibrary">Any address inside the library, e.g. one of its exports</param>
+    public static bool Replace(nint addressInLibrary, string function, nint replacement)
     {
-        if (PlthookOpenByHandle(out var plthook, libraryHandle) != 0)
+        if (PlthookOpenByAddress(out var plthook, addressInLibrary) != 0)
         {
-            Core.Logger.Error($"plthook_open_by_handle failed: {Marshal.PtrToStringUTF8(PlthookError())}");
+            Core.Logger.Error($"plthook_open_by_address failed: {Marshal.PtrToStringUTF8(PlthookError())}");
             return false;
         }
 
