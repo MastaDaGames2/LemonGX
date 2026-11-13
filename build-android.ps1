@@ -183,7 +183,17 @@ Copy-Item (Join-Path $OutDir 'libmain.so') (Join-Path $Staging 'native/libmain.s
 Remove-Item -Recurse -Force -ErrorAction SilentlyContinue (Join-Path $Staging 'MelonLoader/Dependencies/NetStandardPatches'), (Join-Path $Staging 'MelonLoader/Dependencies/MonoBleedingEdgePatches')
 
 $zip = Join-Path $PackageDir 'melon_data.zip'
-[IO.Compression.ZipFile]::CreateFromDirectory($Staging, $zip, [IO.Compression.CompressionLevel]::Optimal, $false)
+# Write entries by hand: Windows PowerShell's CreateFromDirectory stores '\' separators, which Android treats as part
+# of the file name
+$archive = [IO.Compression.ZipFile]::Open($zip, [IO.Compression.ZipArchiveMode]::Create)
+try {
+    $stagingFull = (Resolve-Path $Staging).Path.TrimEnd('\', '/')
+    foreach ($file in Get-ChildItem -Recurse -File $Staging) {
+        $entryName = $file.FullName.Substring($stagingFull.Length + 1).Replace('\', '/')
+        [IO.Compression.ZipFileExtensions]::CreateEntryFromFile($archive, $file.FullName, $entryName, [IO.Compression.CompressionLevel]::Optimal) | Out-Null
+    }
+}
+finally { $archive.Dispose() }
 
 Write-Host "`nDone: $zip" -ForegroundColor Green
 Write-Host 'Use it with the LemonLoader installer (custom melon_data), or inject its folders into an APK:'
