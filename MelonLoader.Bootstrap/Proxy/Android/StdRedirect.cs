@@ -1,4 +1,4 @@
-﻿#if ANDROID
+#if ANDROID
 using System.Runtime.InteropServices;
 using Microsoft.Win32.SafeHandles;
 
@@ -24,11 +24,19 @@ internal static class StdRedirect
     [DllImport("liblog", EntryPoint = "__android_log_write")]
     private static extern int AndroidLogWrite(int prio, [MarshalAs(UnmanagedType.LPUTF8Str)] string tag, [MarshalAs(UnmanagedType.LPUTF8Str)] string text);
 
-    public static void RedirectStdOut() => RedirectStream(StdoutFileno, AndroidLogDebug);
+    private static bool _redirected;
 
-    public static void RedirectStdErr() => RedirectStream(StderrFileno, AndroidLogWarn);
+    /// <summary>Redirects stdout and stderr once; later calls do nothing.</summary>
+    public static void RedirectAll()
+    {
+        if (_redirected)
+            return;
+        _redirected = true;
+        RedirectStream(StdoutFileno, AndroidLogDebug, "stdout");
+        RedirectStream(StderrFileno, AndroidLogWarn, "stderr");
+    }
 
-    private static unsafe void RedirectStream(int fileno, int priority)
+    private static unsafe void RedirectStream(int fileno, int priority, string name)
     {
         var fds = stackalloc int[2];
         if (pipe(fds) != 0)
@@ -49,7 +57,11 @@ internal static class StdRedirect
             using var stream = new FileStream(new SafeFileHandle(readFd, true), FileAccess.Read, 1);
             using var reader = new StreamReader(stream);
             while (reader.ReadLine() is { } line)
+            {
                 AndroidLogWrite(priority, "MelonLoader", line);
+                // Includes the .NET runtime's own fatal error messages
+                BootLog.Write($"[{name}] {line}");
+            }
         })
         {
             IsBackground = true,

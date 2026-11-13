@@ -22,17 +22,37 @@ public static class AndroidProxy
     [DllImport("liblog", EntryPoint = "__android_log_write")]
     private static extern int AndroidLogWrite(int prio, [MarshalAs(UnmanagedType.LPUTF8Str)] string tag, [MarshalAs(UnmanagedType.LPUTF8Str)] string text);
 
-    public static void Log(string text) => AndroidLogWrite(AndroidLogInfo, "MelonLoader", text);
-    public static void LogError(string text) => AndroidLogWrite(AndroidLogError, "MelonLoader", text);
+    public static void Log(string text)
+    {
+        AndroidLogWrite(AndroidLogInfo, "MelonLoader", text);
+        BootLog.Write(text);
+    }
+
+    public static void LogError(string text)
+    {
+        AndroidLogWrite(AndroidLogError, "MelonLoader", text);
+        BootLog.Write("[ERROR] " + text);
+    }
 
     private static bool _unityLoaded;
 
+    // Kept as small as possible: this is the call that starts the .NET runtime, so it only forwards to OnLoad.
     [UnmanagedCallersOnly(EntryPoint = "JNI_OnLoad")]
     [RequiresDynamicCode("Starts the bootstrap, which calls InitConfig")]
-    public static unsafe int JNI_OnLoad(IntPtr vm, void* reserved)
+    public static int JNI_OnLoad(IntPtr vm, IntPtr reserved)
+    {
+        OnLoad(vm);
+        return (int)JNI.Version.V1_6;
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    [RequiresDynamicCode("Starts the bootstrap, which calls InitConfig")]
+    private static unsafe void OnLoad(IntPtr vm)
     {
         try
         {
+            StdRedirect.RedirectAll();
+            Log("libmain.so loaded (JNI_OnLoad)");
             JNI.Initialize(vm);
 
             var nativeLoader = JNI.TryFindClass("com/unity3d/player/NativeLoader");
@@ -42,10 +62,11 @@ public static class AndroidProxy
                 // launcher that loads us directly). Start right away; libunity will be loaded by the game itself.
                 Log("NativeLoader class not found, starting MelonLoader from JNI_OnLoad");
                 AndroidBootstrap.Start();
-                return (int)JNI.Version.V1_6;
+                return;
             }
 
-            var methods = stackalloc JNINativeMethod[2];
+            // Native memory rather than stackalloc: ART keeps no pointer to it, but it's tiny and allocated once
+            var methods = (JNINativeMethod*)NativeMemory.AllocZeroed((nuint)(sizeof(JNINativeMethod) * 2));
             methods[0] = new JNINativeMethod
             {
                 Name = Utf8StringMarshaller.ConvertToUnmanaged("load"),
@@ -66,21 +87,27 @@ public static class AndroidProxy
 
                 LogError("Failed to register NativeLoader natives, starting MelonLoader from JNI_OnLoad");
                 AndroidBootstrap.Start();
+                return;
             }
+
+            Log("Registered NativeLoader natives, waiting for Unity to call NativeLoader.load");
         }
         catch (Exception ex)
         {
             LogError($"JNI_OnLoad failed: {ex}");
         }
-
-        return (int)JNI.Version.V1_6;
     }
 
     // NativeLoader.load(String nativeLibraryDir)
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
     [RequiresDynamicCode("Starts the bootstrap, which calls InitConfig")]
-    private static byte Load(nint env, nint clazz, nint nativeLibraryDir)
+    private static byte Load(nint env, nint clazz, nint nativeLibraryDir) => LoadCore() ? (byte)1 : (byte)0;
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    [RequiresDynamicCode("Starts the bootstrap, which calls InitConfig")]
+    private static bool LoadCore()
     {
+        Log("NativeLoader.load called");
         try
         {
             // Must happen before libunity runs, so our il2cpp hooks are in place when Unity calls il2cpp_init
@@ -91,7 +118,18 @@ public static class AndroidProxy
             LogError($"Failed to start MelonLoader: {ex}");
         }
 
-        return LoadUnity() ? (byte)1 : (byte)0;
+        try
+        {
+            Log("Loading libunity.so");
+            bool loaded = LoadUnity();
+            Log(loaded ? "libunity.so loaded" : "libunity.so failed to load");
+            return loaded;
+        }
+        catch (Exception ex)
+        {
+            LogError($"Failed to load Unity: {ex}");
+            return false;
+        }
     }
 
     // NativeLoader.unload()

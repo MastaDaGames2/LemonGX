@@ -33,8 +33,7 @@ public static class AndroidBootstrap
 
         // linux-bionic .NET writes its own diagnostics to stdout/stderr, which Android discards. Mirror them
         // (and our console output) into logcat.
-        StdRedirect.RedirectStdOut();
-        StdRedirect.RedirectStdErr();
+        StdRedirect.RedirectAll();
 
         PackageName = ReadPackageName();
         if (string.IsNullOrEmpty(PackageName))
@@ -76,6 +75,7 @@ public static class AndroidBootstrap
         }
 
         EnsureStoragePermission();
+        AndroidProxy.Log("Storage permission checked");
         Directory.CreateDirectory(BaseDir);
 
         APKAssetManager.Initialize();
@@ -92,7 +92,9 @@ public static class AndroidBootstrap
         if (!Exports.InitializeAndroid(selfHandle))
             return;
 
+        AndroidProxy.Log("Initializing the bootstrap");
         Core.Init();
+        AndroidProxy.Log($"Bootstrap initialized; MelonLoader's own log: {Path.Combine(BaseDir, "MelonLoader", "Latest.log")}");
     }
 
     // /proc/self/cmdline holds the process name, which is the package name (optionally followed by ":service")
