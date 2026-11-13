@@ -19,6 +19,10 @@ namespace MelonLoader.InternalUtils
                 return true;
 
             MelonLogger.MsgDirect("Loading Il2CppAssemblyGenerator...");
+#if ANDROID
+            // On Android the generator ships its own dependencies (the in-process Cpp2IL) next to it
+            MelonLoader.Resolver.MelonAssemblyResolver.AddSearchDirectory(MelonEnvironment.Il2CppAssemblyGeneratorDirectory);
+#endif
             var module = MelonModule.Load(moduleInfo);
             if (module == null)
             {

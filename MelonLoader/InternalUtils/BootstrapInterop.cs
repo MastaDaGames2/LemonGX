@@ -122,7 +122,13 @@ internal static unsafe class BootstrapInterop
             MelonLogger.Error("Failed to start MelonLoader");
             MelonLogger.Error(ex);
 
+#if ANDROID
+            // An exception crossing back into native code aborts the Mono runtime (and the game). Let the game run
+            // without mods instead; the log has the error.
+            MelonLogger.Error("The game will continue without mods");
+#else
             throw new("Error at start");
+#endif
         }
     }
 }
