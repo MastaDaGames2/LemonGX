@@ -209,14 +209,15 @@ internal static class DotnetHandler
 
         MonoLib.InstallUnhandledExceptionHook?.Invoke(Marshal.GetFunctionPointerForDelegate(MonoUnhandledExceptionDelegate), 0);
 
-        if (MonoLib.SetThreadChecker != null)
+        // LemonLoader's thread checker makes the Mono GC skip threads attached to il2cpp. With preemptive suspend
+        // (needed for il2cpp -> managed calls, see Initialize) that would let Unity's main thread keep running managed
+        // code (MelonLoader, the assembly generator, mods) during a collection and corrupt the heap. So it's only
+        // installed if explicitly requested for testing.
+        if (MonoLib.SetThreadChecker != null
+            && Environment.GetEnvironmentVariable("LEMONGX_MONO_THREAD_CHECKER") == "1")
         {
             MonoLib.SetThreadChecker(Marshal.GetFunctionPointerForDelegate(MonoCheckThreadDelegate));
-            MelonDebug.Log("Installed Mono GC thread checker");
-        }
-        else
-        {
-            Core.Logger.Warning("This .NET runtime has no LemonLoader GC patch; the game may freeze during garbage collection");
+            Core.Logger.Warning("Installed the Mono GC thread checker (LEMONGX_MONO_THREAD_CHECKER=1)");
         }
     }
 
