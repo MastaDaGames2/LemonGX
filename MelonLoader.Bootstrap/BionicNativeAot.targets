@@ -28,9 +28,31 @@
         <LinkerArg Include="-Wl,-z,noexecstack" />
         <!-- Android 15+ devices may use 16 KB pages -->
         <LinkerArg Include="-Wl,-z,max-page-size=16384" />
-        <!-- Dobby is C++; Android has no shared libstdc++, so link the NDK's libc++ statically -->
-        <LinkerArg Include="-static-libstdc++" />
     </ItemGroup>
+
+    <PropertyGroup>
+        <NdkTripleDir Condition="$(RuntimeIdentifier.EndsWith('-arm64'))">aarch64-linux-android</NdkTripleDir>
+        <NdkTripleDir Condition="$(RuntimeIdentifier.EndsWith('-x64'))">x86_64-linux-android</NdkTripleDir>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <!-- Dobby is C++ and needs the C++ runtime (operator new, exception handling). Android apps have to bring their
+             own, and NativeAOT links with clang rather than clang++, so link the NDK's static libc++ explicitly. -->
+        <NativeLibrary Include="$(SysRoot)/usr/lib/$(NdkTripleDir)/libc++_static.a" />
+        <NativeLibrary Include="$(SysRoot)/usr/lib/$(NdkTripleDir)/libc++abi.a" />
+    </ItemGroup>
+
+    <!-- Fail the build if the library still needs symbols Android won't provide (it would fail to load on device) -->
+    <Target Name="CheckAndroidUnresolvedSymbols" AfterTargets="LinkNative">
+        <Exec Command="llvm-nm -D --undefined-only &quot;$(NativeBinary)&quot;" ConsoleToMSBuild="true" StandardOutputImportance="Low">
+            <Output TaskParameter="ConsoleOutput" ItemName="_AndroidUndefinedSymbol" />
+        </Exec>
+        <ItemGroup>
+            <_AndroidBadSymbol Include="@(_AndroidUndefinedSymbol)"
+                               Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('%(Identity)', '\s(_Z|__gxx_|__cxa_(begin|end|throw|allocate|rethrow|guard)|_Unwind_)'))" />
+        </ItemGroup>
+        <Error Condition="'@(_AndroidBadSymbol)' != ''" Text="libmain.so needs C++ runtime symbols that Android doesn't provide: @(_AndroidBadSymbol)" />
+    </Target>
 
     <Target Name="CheckAndroidNdk" BeforeTargets="SetupOSSpecificProps">
         <Error Condition="'$(ANDROID_NDK_ROOT)' == '' Or !Exists('$(NdkBin)clang$(NdkExeSuffix)')"
