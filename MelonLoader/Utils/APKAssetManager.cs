@@ -91,6 +91,32 @@ public static class APKAssetManager
         return new APKAssetStream(asset);
     }
 
+    /// <summary>
+    /// Opens an asset as a seekable stream. Small assets are buffered in memory, large ones are copied to a
+    /// temporary file that is deleted when the stream is closed.
+    /// </summary>
+    public static Stream? GetSeekableAssetStream(string path)
+    {
+        using Stream? assetStream = GetAssetStream(path);
+        if (assetStream == null)
+            return null;
+
+        const long maxInMemory = 64L * 1024 * 1024;
+        if (assetStream.Length > 0 && assetStream.Length <= maxInMemory)
+        {
+            MemoryStream memory = new();
+            assetStream.CopyTo(memory, 81920);
+            memory.Position = 0;
+            return memory;
+        }
+
+        string tempPath = Path.Combine(Path.GetTempPath(), $"melonloader_asset_{Guid.NewGuid():N}");
+        FileStream file = new(tempPath, FileMode.Create, FileAccess.ReadWrite, FileShare.None, 81920, FileOptions.DeleteOnClose);
+        assetStream.CopyTo(file, 81920);
+        file.Position = 0;
+        return file;
+    }
+
     public static string[] GetDirectoryContents(string directory)
     {
         using JString pathString = JNI.NewString(directory);

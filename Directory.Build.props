@@ -55,6 +55,9 @@
         <AssetRipperVersion>3.2.0</AssetRipperVersion>
         <AsmResolverVersion>6.0.0-beta.5</AsmResolverVersion>
         <Il2CppInteropVersion>1.5.1-ci.845</Il2CppInteropVersion>
+        <!-- Android only: Cpp2IL runs in-process there, and Disarm is shared with LemonLoader's Il2CppInterop -->
+        <Cpp2ILVersion>2022.1.0-pre-release.21</Cpp2ILVersion>
+        <DisarmVersion>2022.1.0-master.99</DisarmVersion>
 	</PropertyGroup>
 	
 	<!--

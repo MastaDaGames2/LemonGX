@@ -53,6 +53,11 @@ public static class AndroidBootstrap
         DotnetDir = Path.Combine(InternalDataDir, "dotnet");
         BaseDir = Path.Combine(GetExternalStorageDirectory(), "MelonLoader", PackageName);
 
+        // Android has no /tmp; give both runtimes the app's cache folder for Path.GetTempPath()
+        var cacheDir = Path.Combine(InternalDataDir, "cache");
+        Directory.CreateDirectory(cacheDir);
+        LibcNative.Setenv("TMPDIR", cacheDir, true);
+
         EnsureStoragePermission();
         Directory.CreateDirectory(BaseDir);
 

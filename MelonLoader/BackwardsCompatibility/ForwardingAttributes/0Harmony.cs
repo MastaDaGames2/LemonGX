@@ -44,7 +44,9 @@ using System.Runtime.CompilerServices;
 [assembly: TypeForwardedTo(typeof(HarmonyLib.HarmonyGlobalSettings))]
 [assembly: TypeForwardedTo(typeof(HarmonyLib.HarmonyMethod))]
 [assembly: TypeForwardedTo(typeof(HarmonyLib.HarmonyMethodExtensions))]
+#if !ANDROID // not in the reorganized MonoMod/HarmonyX used on Android
 [assembly: TypeForwardedTo(typeof(HarmonyLib.InlineSignature))]
+#endif
 [assembly: TypeForwardedTo(typeof(HarmonyLib.PatchInfo))]
 [assembly: TypeForwardedTo(typeof(HarmonyLib.Patch))]
 [assembly: TypeForwardedTo(typeof(HarmonyLib.PatchClassProcessor))]

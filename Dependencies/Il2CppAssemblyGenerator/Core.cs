@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using System.Net.Http;
 using MelonLoader.Il2CppAssemblyGenerator.Packages;
 using MelonLoader.Il2CppAssemblyGenerator.Packages.Models;
@@ -48,6 +48,16 @@ namespace MelonLoader.Il2CppAssemblyGenerator
             if (!LoaderConfig.Current.UnityEngine.ForceOfflineGeneration)
                 RemoteAPI.Contact();
 
+#if ANDROID
+            // Cpp2IL runs in-process on Android, and the game's files have to be pulled out of the APK
+            GameAssemblyPath = AndroidGameFiles.GetLibIl2CppPath(BasePath);
+            if (string.IsNullOrEmpty(GameAssemblyPath))
+            {
+                Logger.Error("Could not find libil2cpp.so");
+                return 1;
+            }
+            cpp2il = new Cpp2IL_InProcess();
+#else
             Cpp2IL cpp2IL_netcore = new Cpp2IL();
             if (MelonUtils.IsWindows
                 && (cpp2IL_netcore.VersionSem < Cpp2IL.NetCoreMinVersion))
@@ -55,6 +65,7 @@ namespace MelonLoader.Il2CppAssemblyGenerator
             else
                 cpp2il = cpp2IL_netcore;
             cpp2il_scrs = new Cpp2IL_StrippedCodeRegSupport(cpp2il);
+#endif
 
             il2cppinterop = new Packages.Il2CppInterop();
             unitydependencies = new UnityDependencies();
@@ -68,7 +79,7 @@ namespace MelonLoader.Il2CppAssemblyGenerator
             Logger.Msg($"Using Deobfuscation Regex = {(string.IsNullOrEmpty(deobfuscationRegex.Regex) ? "null" : deobfuscationRegex.Regex)}");
 
             if (!cpp2il.Setup()
-                || !cpp2il_scrs.Setup()
+                || (cpp2il_scrs != null && !cpp2il_scrs.Setup())
                 || !il2cppinterop.Setup()
                 || !unitydependencies.Setup()
                 || !deobfuscationMap.Setup())

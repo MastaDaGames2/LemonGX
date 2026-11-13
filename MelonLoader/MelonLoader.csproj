@@ -13,6 +13,10 @@
         <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
         <PackageProjectUrl>$(RepositoryUrl)</PackageProjectUrl>
     </PropertyGroup>
+    <PropertyGroup Condition="'$(IsAndroidBuild)' == 'true'">
+        <!-- Android only runs il2cpp games through .NET -->
+        <TargetFrameworks>$(DotNetTarget)</TargetFrameworks>
+    </PropertyGroup>
     <ItemDefinitionGroup Condition="$(IsNuGetPack) != 'true'">
         <PackageReference>
             <PrivateAssets>all</PrivateAssets>
@@ -61,6 +65,10 @@
         <PackageReference Include="Il2CppInterop.Runtime" Version="$(Il2CppInteropVersion)" />
         <PackageReference Include="Il2CppInterop.Generator" Version="$(Il2CppInteropVersion)" />
         <PackageReference Include="Il2CppInterop.HarmonySupport" Version="$(Il2CppInteropVersion)" />
+    </ItemGroup>
+    <ItemGroup Condition="'$(IsAndroidBuild)' != 'true'">
+        <Compile Remove="JNI/**" />
+        <Compile Remove="Utils/APKAssetManager.cs" />
     </ItemGroup>
     <ItemGroup>
         <EmbeddedResource Include="Resources\classdata.tpk" />

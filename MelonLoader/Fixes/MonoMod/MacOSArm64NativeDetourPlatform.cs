@@ -1,3 +1,4 @@
+#if !ANDROID
 using System;
 using System.Runtime.InteropServices;
 using MonoMod.RuntimeDetour;
@@ -206,3 +207,4 @@ internal sealed class MacOSArm64NativeDetourPlatform : IDetourNativePlatform
     [DllImport("libSystem.B.dylib", CallingConvention = CallingConvention.Cdecl)]
     private static extern void sys_icache_invalidate(IntPtr start, UIntPtr len);
 }
+#endif

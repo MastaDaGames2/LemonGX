@@ -1,4 +1,4 @@
-﻿#if NET6_0_OR_GREATER
+#if NET6_0_OR_GREATER
 
 using MelonLoader.NativeUtils;
 using MonoMod.RuntimeDetour;
@@ -277,8 +277,16 @@ namespace MelonLoader.Fixes.Il2CppInterop
                 return (null, null, null, IntPtr.Zero);
            
             // Return the New Method
+#if ANDROID
+            MethodInfo newMethod = trampoline.Generate();
+            var triple = global::MonoMod.Core.Platforms.PlatformTriple.Current;
+            // Keep the method's code from moving for the lifetime of the process
+            triple.PinMethodIfNeeded(newMethod);
+            return (patcher, trampoline, newMethod, triple.Runtime.GetMethodEntryPoint(newMethod));
+#else
             MethodInfo newMethod = trampoline.Generate().Pin();
             return (patcher, trampoline, newMethod, newMethod.GetNativeStart());
+#endif
         }
         
         private static string GetMethodSignature(MethodBase method)

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -84,20 +84,20 @@ namespace MelonLoader.InternalUtils
             try
             {
                 string bundlePath = Path.Combine(gameDataPath, "globalgamemanagers");
-                if (!File.Exists(bundlePath))
+                if (!GameFileExists(bundlePath))
                     bundlePath = Path.Combine(gameDataPath, "mainData");
 
-                if (!File.Exists(bundlePath))
+                if (!GameFileExists(bundlePath))
                 {
                     bundlePath = Path.Combine(gameDataPath, "data.unity3d");
-                    if (!File.Exists(bundlePath))
+                    if (!GameFileExists(bundlePath))
                         return;
 
-                    BundleFileInstance bundleFile = assetsManager.LoadBundleFile(bundlePath);
+                    BundleFileInstance bundleFile = assetsManager.LoadBundleFile(GameFileOpenRead(bundlePath), bundlePath);
                     instance = assetsManager.LoadAssetsFileFromBundle(bundleFile, "globalgamemanagers");
                 }
                 else
-                    instance = assetsManager.LoadAssetsFile(bundlePath, true);
+                    instance = assetsManager.LoadAssetsFile(GameFileOpenRead(bundlePath), bundlePath, true);
                 if (instance == null)
                     return;
 
@@ -147,10 +147,10 @@ namespace MelonLoader.InternalUtils
             try
             {
                 string appInfoFilePath = Path.Combine(MelonEnvironment.UnityGameDataDirectory, "app.info");
-                if (!File.Exists(appInfoFilePath))
+                if (!GameFileExists(appInfoFilePath))
                     return;
 
-                string[] filestr = File.ReadAllLines(appInfoFilePath);
+                string[] filestr = GameFileReadAllLines(appInfoFilePath);
                 if ((filestr == null) || (filestr.Length < 2))
                     return;
 
@@ -184,8 +184,8 @@ namespace MelonLoader.InternalUtils
             try
             {
                 var globalgamemanagersPath = Path.Combine(gameDataPath, "globalgamemanagers");
-                if (File.Exists(globalgamemanagersPath))
-                    return GetVersionFromGlobalGameManagers(File.ReadAllBytes(globalgamemanagersPath));
+                if (GameFileExists(globalgamemanagersPath))
+                    return GetVersionFromGlobalGameManagers(GameFileReadAllBytes(globalgamemanagersPath));
             }
             catch (Exception ex)
             {
@@ -195,8 +195,8 @@ namespace MelonLoader.InternalUtils
             try
             {
                 var dataPath = Path.Combine(gameDataPath, "data.unity3d");
-                if (File.Exists(dataPath))
-                    return GetVersionFromDataUnity3D(File.OpenRead(dataPath));
+                if (GameFileExists(dataPath))
+                    return GetVersionFromDataUnity3D(GameFileOpenRead(dataPath));
             }
             catch (Exception ex)
             {
@@ -255,6 +255,44 @@ namespace MelonLoader.InternalUtils
             }
 
             return TryParse(verString.ToString().Trim());
+        }
+    
+        // Unity's data folder is a real folder everywhere except Android, where it lives in the APK's assets
+        private static bool GameFileExists(string path)
+        {
+#if ANDROID
+            return APKAssetManager.DoesAssetExist(path);
+#else
+            return File.Exists(path);
+#endif
+        }
+
+        private static byte[] GameFileReadAllBytes(string path)
+        {
+#if ANDROID
+            return APKAssetManager.GetAssetBytes(path);
+#else
+            return File.ReadAllBytes(path);
+#endif
+        }
+
+        private static string[] GameFileReadAllLines(string path)
+        {
+#if ANDROID
+            return Encoding.UTF8.GetString(APKAssetManager.GetAssetBytes(path)).Replace("\r\n", "\n").Split('\n');
+#else
+            return File.ReadAllLines(path);
+#endif
+        }
+
+        private static Stream GameFileOpenRead(string path)
+        {
+#if ANDROID
+            // Asset streams can't seek, which AssetsTools needs
+            return APKAssetManager.GetSeekableAssetStream(path);
+#else
+            return File.OpenRead(path);
+#endif
         }
     }
 }

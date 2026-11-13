@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Diagnostics;
 using System.Reflection;
 using System.IO;
@@ -10,7 +10,9 @@ using MelonLoader.Utils;
 using MelonLoader.InternalUtils;
 using MelonLoader.Melons;
 using MonoMod.RuntimeDetour;
+#if !ANDROID
 using MonoMod.RuntimeDetour.Platforms;
+#endif
 
 [assembly: MelonLoader.PatchShield]
 
@@ -34,6 +36,13 @@ namespace MelonLoader
             LoaderConfig.Current = config;
 
             MelonLaunchOptions.Load();
+
+#if ANDROID
+            // The bootstrap owns the JavaVM; managed code needs it to read the APK's assets
+            Java.JNI.Initialize(BootstrapInterop.Library.GetJavaVM());
+            APKAssetManager.Initialize();
+            global::MonoMod.Logs.DebugLog.OnLog += (source, time, level, message) => MelonDebug.Msg($"[MonoMod] [{source}] [{level}] {message}");
+#endif
 
 #if NET35
             // Disabled for now because of issues
@@ -125,13 +134,17 @@ namespace MelonLoader
 
 #endif
 
+#if !ANDROID // Targets the legacy MonoMod API; LemonLoader's reorganized MonoMod doesn't need it
             Fixes.MonoMod.DetourContextDisposeFix.Install();
+#endif
 
 #if NET6_0_OR_GREATER
             // if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             //  NativeStackWalk.LogNativeStackTrace();
 
+#if !ANDROID // Not applicable to the Mono-based .NET runtime used on Android
             Fixes.Dotnet.DotnetAssemblyLoadContextFix.Install();
+#endif
             Fixes.Dotnet.DotnetModHandlerRedirectionFix.Install();
 #endif
 
@@ -172,7 +185,9 @@ namespace MelonLoader
 
             MelonCompatibilityLayer.LoadModules();
 
+#if !ANDROID
             bHapticsManager.Connect(Properties.BuildInfo.Name, UnityInformationHandler.GameName);
+#endif
 
             MelonFolderHandler.ScanForFolders();
             MelonFolderHandler.LoadMelons(MelonFolderHandler.ScanType.UserLibs);

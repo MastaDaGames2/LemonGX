@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Linq;
 using System.Reflection;
 using HarmonyLib;
@@ -50,9 +50,15 @@ namespace MelonLoader
 			}
 			catch (Exception ex) { LogException(ex); }
 
+#if ANDROID
+			// The reorganized MonoMod (used on Android) can't veto a detour; checking still surfaces violations
+			DetourManager.DetourApplied += info => MethodCheck(info.Method.Method);
+			DetourManager.ILHookApplied += info => MethodCheck(info.Method.Method);
+#else
 			Hook.OnDetour += (detour, originalMethod, patchMethod, delegateTarget) => MethodCheck(originalMethod);
 			ILHook.OnDetour += (detour, originalMethod, ilmanipulator) => MethodCheck(originalMethod);
 			Detour.OnDetour += (detour, originalMethod, patchMethod) => MethodCheck(originalMethod);
+#endif
 		}
 
 		private static bool PatchMethod_PatchFunctions_ReversePatch(MethodBase __1) => MethodCheck(__1);

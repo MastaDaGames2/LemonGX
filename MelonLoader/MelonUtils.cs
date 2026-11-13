@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -56,6 +56,8 @@ namespace MelonLoader
                 CurrentPlatform = MelonPlatformAttribute.CompatiblePlatforms.LINUX;
             if (IsMac)
                 CurrentPlatform = MelonPlatformAttribute.CompatiblePlatforms.MAC;
+            if (IsAndroid)
+                CurrentPlatform = MelonPlatformAttribute.CompatiblePlatforms.ANDROID;
         }
 
         public static MelonPlatformAttribute.CompatiblePlatforms CurrentPlatform { get; private set; }
@@ -116,6 +118,12 @@ namespace MelonLoader
         public static bool IsUnix => GetPlatform is PlatformID.Unix;
         public static bool IsWindows => GetPlatform is PlatformID.Win32NT or PlatformID.Win32S or PlatformID.Win32Windows or PlatformID.WinCE;
         public static bool IsMac => GetPlatform is PlatformID.MacOSX;
+        public static bool IsAndroid =>
+#if ANDROID
+            true;
+#else
+            false;
+#endif
 
 #if NET6_0_OR_GREATER
         private static PlatformID GetPlatformFromRuntimeInformation()
@@ -617,6 +625,19 @@ namespace MelonLoader
 
         internal static string GetOSVersion()
         {
+#if ANDROID
+            try
+            {
+                var version = Java.JNI.FindClass("android/os/Build$VERSION"); // cached by JNI, must not be disposed
+                var release = Java.JNI.GetStaticObjectField<Java.JString>(version, Java.JNI.GetStaticFieldID(version, "RELEASE", "Ljava/lang/String;"));
+                var sdk = Java.JNI.GetStaticField<int>(version, Java.JNI.GetStaticFieldID(version, "SDK_INT", "I"));
+                return $"Android {release.GetString()} (API {sdk})";
+            }
+            catch
+            {
+                return $"Android ({Environment.OSVersion.VersionString})";
+            }
+#endif
             if (IsUnix || IsMac)
                 return Environment.OSVersion.VersionString;
 

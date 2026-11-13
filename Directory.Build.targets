@@ -1,0 +1,49 @@
+<Project>
+    <!--
+        Android (LemonLoader) builds swap HarmonyX, MonoMod and Il2CppInterop for LemonLoader's forks, which add the
+        ARM64 support those libraries need on Android. The forks live in External/ as submodules and are built
+        beforehand by build-android (MonoMod needs its own pinned SDK), so they are referenced as prebuilt assemblies.
+    -->
+    <PropertyGroup Condition="'$(IsAndroidBuild)' == 'true'">
+        <LemonExternalDir>$(MSBuildThisFileDirectory)External/</LemonExternalDir>
+        <LemonForkConfiguration Condition="'$(LemonForkConfiguration)' == ''">Release</LemonForkConfiguration>
+        <LemonMonoModBin>$(LemonExternalDir)MonoMod/artifacts/bin/MonoMod.RuntimeDetour/$(LemonForkConfiguration.ToLower())_net6.0/</LemonMonoModBin>
+        <LemonHarmonyBin>$(LemonExternalDir)HarmonyX/Harmony/bin/$(LemonForkConfiguration)/netstandard2.0/</LemonHarmonyBin>
+        <LemonIl2CppInteropBin>$(LemonExternalDir)Il2CppInterop/bin/</LemonIl2CppInteropBin>
+        <!-- Only MelonLoader itself ships these assemblies; everything else compiles against them -->
+        <LemonCopyForks Condition="'$(MSBuildProjectName)' == 'MelonLoader'">true</LemonCopyForks>
+        <LemonCopyForks Condition="'$(LemonCopyForks)' == ''">false</LemonCopyForks>
+    </PropertyGroup>
+
+    <PropertyGroup Condition="'$(IsAndroidBuild)' == 'true'">
+        <LemonUseForks Condition="'$(MSBuildProjectName)' != 'MelonLoader.Bootstrap' And '$(MSBuildProjectName)' != 'PortablePdbToMdb'">true</LemonUseForks>
+        <_LemonExcludeAssets Condition="'$(LemonCopyForks)' != 'true'">Runtime</_LemonExcludeAssets>
+    </PropertyGroup>
+
+    <ItemGroup Condition="'$(LemonUseForks)' == 'true'">
+        <PackageReference Remove="HarmonyX;MonoMod;MonoMod.RuntimeDetour;MonoMod.Utils" />
+        <PackageReference Remove="Il2CppInterop.Common;Il2CppInterop.Runtime;Il2CppInterop.Generator;Il2CppInterop.HarmonySupport" />
+
+        <Reference Include="0Harmony" HintPath="$(LemonHarmonyBin)0Harmony.dll" Private="$(LemonCopyForks)" />
+        <Reference Include="MonoMod.Backports" HintPath="$(LemonMonoModBin)MonoMod.Backports.dll" Private="$(LemonCopyForks)" />
+        <Reference Include="MonoMod.Core" HintPath="$(LemonMonoModBin)MonoMod.Core.dll" Private="$(LemonCopyForks)" />
+        <Reference Include="MonoMod.ILHelpers" HintPath="$(LemonMonoModBin)MonoMod.ILHelpers.dll" Private="$(LemonCopyForks)" />
+        <!-- Aliased: it carries the same Iced.Intel types as the Iced package MelonLoader uses -->
+        <Reference Include="MonoMod.Iced" HintPath="$(LemonMonoModBin)MonoMod.Iced.dll" Private="$(LemonCopyForks)" Aliases="MonoModIced" />
+        <Reference Include="MonoMod.RuntimeDetour" HintPath="$(LemonMonoModBin)MonoMod.RuntimeDetour.dll" Private="$(LemonCopyForks)" />
+        <Reference Include="MonoMod.Utils" HintPath="$(LemonMonoModBin)MonoMod.Utils.dll" Private="$(LemonCopyForks)" />
+
+        <Reference Include="Il2CppInterop.Common" HintPath="$(LemonIl2CppInteropBin)Il2CppInterop.Common/netstandard2.0/Il2CppInterop.Common.dll" Private="$(LemonCopyForks)" />
+        <Reference Include="Il2CppInterop.Runtime" HintPath="$(LemonIl2CppInteropBin)Il2CppInterop.Runtime/net6.0/Il2CppInterop.Runtime.dll" Private="$(LemonCopyForks)" />
+        <Reference Include="Il2CppInterop.Generator" HintPath="$(LemonIl2CppInteropBin)Il2CppInterop.Generator/netstandard2.1/Il2CppInterop.Generator.dll" Private="$(LemonCopyForks)" />
+        <Reference Include="Il2CppInterop.HarmonySupport" HintPath="$(LemonIl2CppInteropBin)Il2CppInterop.HarmonySupport/net6.0/Il2CppInterop.HarmonySupport.dll" Private="$(LemonCopyForks)" />
+
+        <!-- Dependencies the replaced packages used to bring in -->
+        <PackageReference Include="Disarm" Version="$(DisarmVersion)" ExcludeAssets="$(_LemonExcludeAssets)" PrivateAssets="all" />
+        <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.3" ExcludeAssets="Runtime" PrivateAssets="all"
+                          Condition="'$(MSBuildProjectName)' != 'MelonLoader'" />
+        <!-- Il2CppInterop.ReferenceLibs depends on the upstream Il2CppInterop.Runtime; keep it from shadowing the fork -->
+        <PackageReference Include="Il2CppInterop.Runtime" Version="$(Il2CppInteropVersion)" ExcludeAssets="all" PrivateAssets="all"
+                          Condition="'@(PackageReference->WithMetadataValue('Identity', 'Il2CppInterop.ReferenceLibs'))' != ''" />
+    </ItemGroup>
+</Project>

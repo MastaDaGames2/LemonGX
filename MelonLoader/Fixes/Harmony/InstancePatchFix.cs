@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Reflection;
 using HarmonyLib;
 using MonoMod.RuntimeDetour;
@@ -19,8 +19,12 @@ namespace MelonLoader.Fixes.Harmony
             }
             catch (Exception ex) { MelonLogger.Warning(ex); }
 
+#if ANDROID
+            DetourManager.DetourApplied += info => PatchMethod(info.Entry);
+#else
             Hook.OnDetour += (detour, originalMethod, patchMethod, delegateTarget) => PatchMethod(patchMethod);
             Detour.OnDetour += (detour, originalMethod, patchMethod) => PatchMethod(patchMethod);
+#endif
         }
 
         private static bool PatchMethod(MethodBase __0)

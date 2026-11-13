@@ -1,4 +1,4 @@
-﻿using MelonLoader.Logging;
+using MelonLoader.Logging;
 
 using System.Runtime.InteropServices;
 
@@ -31,3 +31,8 @@ internal delegate bool BoolRetFn();
 
 [UnmanagedFunctionPointer(CallingConvention.Winapi)]
 internal delegate void GetLoaderConfigFn(ref LoaderConfig config);
+
+#if ANDROID
+[UnmanagedFunctionPointer(CallingConvention.Winapi)]
+internal delegate nint GetJavaVM();
+#endif

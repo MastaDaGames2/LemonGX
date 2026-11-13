@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Reflection;
 using MonoMod.RuntimeDetour;
 
@@ -8,8 +8,12 @@ namespace MelonLoader.Fixes.MonoMod
     {
         internal static void Install()
         {
+#if ANDROID
+            DetourManager.DetourApplied += info => EnsureStatic(info.Entry);
+#else
             Hook.OnDetour += (detour, originalMethod, patchMethod, delegateTarget) => EnsureStatic(patchMethod);
             Detour.OnDetour += (detour, originalMethod, patchMethod) => EnsureStatic(patchMethod);
+#endif
         }
 
         private static bool EnsureStatic(MethodBase method)
