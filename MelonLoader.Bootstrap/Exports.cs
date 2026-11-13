@@ -73,6 +73,22 @@ internal static class Exports
         return Directory.Exists(DataDir);
     }
 
+#if ANDROID
+    // On Android the game's data lives inside the APK (assets/bin/Data) and the process is app_process,
+    // so the desktop heuristics don't apply. AndroidBootstrap has already resolved the package and paths.
+    internal static bool InitializeAndroid(nint moduleHandle)
+    {
+        LibraryHandle = moduleHandle;
+
+        ProcessPath = Environment.ProcessPath ?? "/system/bin/app_process64";
+        ProcessFileName = Proxy.Android.AndroidBootstrap.PackageName;
+        ProcessFileNameWithoutExt = Proxy.Android.AndroidBootstrap.PackageName;
+        ProcessDirectory = Proxy.Android.AndroidBootstrap.InternalDataDir;
+        DataDir = "bin/Data";
+        return true;
+    }
+#endif
+
 #if LINUX || OSX
     // We have confirmed Unity is about to get its main invoked, but we need to protect us against
     // double entry from other processes the game might launch. The most reliable way is to simply cut
@@ -219,8 +235,8 @@ internal static class Exports
             return;
         }
 
-        var mMsg = new ReadOnlySpan<char>(msg, msgLength);
-        var mStrippedMsg = new ReadOnlySpan<char>(strippedMsg, strippedMsgLength);
+        var mMsg = PointerToSpan(msg, msgLength);
+        var mStrippedMsg = PointerToSpan(strippedMsg, strippedMsgLength);
 
         if (sectionColor == null || section == null)
         {
@@ -228,13 +244,13 @@ internal static class Exports
             return;
         }
 
-        MelonLogger.Log(*msgColor, mMsg, *sectionColor, new(section, sectionLength), mStrippedMsg);
+        MelonLogger.Log(*msgColor, mMsg, *sectionColor, PointerToSpan(section, sectionLength), mStrippedMsg);
     }
 
     [UnmanagedCallersOnly(EntryPoint = "LogError")]
     public static unsafe void LogError(char* msg, int msgLength, char* section, int sectionLength, bool warning)
     {
-        var mMsg = new ReadOnlySpan<char>(msg, msgLength);
+        var mMsg = PointerToSpan(msg, msgLength);
         if (section == null)
         {
             if (warning)
@@ -246,15 +262,31 @@ internal static class Exports
         }
 
         if (warning)
-            MelonLogger.LogWarning(mMsg, new(section, sectionLength));
+            MelonLogger.LogWarning(mMsg, PointerToSpan(section, sectionLength));
         else
-            MelonLogger.LogError(mMsg, new(section, sectionLength));
+            MelonLogger.LogError(mMsg, PointerToSpan(section, sectionLength));
     }
 
     [UnmanagedCallersOnly(EntryPoint = "LogMelonInfo")]
     public static unsafe void LogMelonInfo(ColorARGB* nameColor, char* name, int nameLength, char* info, int infoLength)
     {
-        MelonLogger.LogMelonInfo(*nameColor, new(name, nameLength), new(info, infoLength));
+        MelonLogger.LogMelonInfo(*nameColor, PointerToSpan(name, nameLength), PointerToSpan(info, infoLength));
+    }
+
+    // Strings from managed arrive as UTF-16 (CharSet.Unicode). The Mono-based .NET runtime used on Android has been
+    // observed passing them as UTF-8 instead, so detect which one we got there.
+    private static unsafe ReadOnlySpan<char> PointerToSpan(char* str, int length)
+    {
+        if (str == null || length <= 0)
+            return ReadOnlySpan<char>.Empty;
+#if ANDROID
+        // A UTF-16 string starting with an ASCII/Latin-1 char has a zero high byte. A UTF-8 string only has a zero
+        // second byte when it is one char long, where both readings give the same result.
+        var looksUtf16 = ((byte*)str)[1] == 0;
+        if (!looksUtf16)
+            return Marshal.PtrToStringUTF8((nint)str);
+#endif
+        return new ReadOnlySpan<char>(str, length);
     }
 
     [UnmanagedCallersOnly(EntryPoint = "MonoInstallHooks")]
@@ -281,6 +313,14 @@ internal static class Exports
     {
         return ConsoleHandler.HasOwnWindow;
     }
+
+#if ANDROID
+    [UnmanagedCallersOnly(EntryPoint = "GetJavaVM")]
+    public static nint GetJavaVM()
+    {
+        return MelonLoader.Java.JNI.lastVmPtr;
+    }
+#endif
 
     [UnmanagedCallersOnly(EntryPoint = "GetLoaderConfig")]
     public static unsafe void GetLoaderConfig(nint* pConfig)

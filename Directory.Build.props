@@ -28,7 +28,7 @@
         <Configurations>Debug;Release</Configurations>
 		
         <Platforms>x86;x64;arm64</Platforms>
-        <RuntimeIdentifiers>win-x86;win-x64;linux-x64;osx-x64;osx-arm64</RuntimeIdentifiers>
+        <RuntimeIdentifiers>win-x86;win-x64;linux-x64;osx-x64;osx-arm64;linux-bionic-arm64</RuntimeIdentifiers>
 		
         <AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
         <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
@@ -88,8 +88,16 @@
 	<!--
 		Platform Constants
 	-->
-    <PropertyGroup Condition="'$(RuntimeIdentifier.StartsWith(`linux-`))' == 'true'">
+    <PropertyGroup Condition="'$(RuntimeIdentifier.StartsWith(`linux-`))' == 'true' And '$(RuntimeIdentifier.StartsWith(`linux-bionic-`))' != 'true'">
         <DefineConstants>$(DefineConstants);LINUX</DefineConstants>
+        <LibPrefix>lib</LibPrefix>
+        <LibExt>.a</LibExt>
+    </PropertyGroup>
+
+    <!-- Android (LemonLoader). linux-bionic is the .NET RID for Android's libc. -->
+    <PropertyGroup Condition="'$(RuntimeIdentifier.StartsWith(`linux-bionic-`))' == 'true'">
+        <DefineConstants>$(DefineConstants);ANDROID</DefineConstants>
+        <IsAndroidBuild>true</IsAndroidBuild>
         <LibPrefix>lib</LibPrefix>
         <LibExt>.a</LibExt>
     </PropertyGroup>

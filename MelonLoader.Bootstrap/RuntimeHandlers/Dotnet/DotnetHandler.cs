@@ -1,6 +1,10 @@
 ﻿using System.Runtime.InteropServices;
 using System.Text;
 using MelonLoader.Bootstrap.Logging;
+#if ANDROID
+using MelonLoader.Bootstrap.Proxy.Android;
+using MelonLoader.Bootstrap.RuntimeHandlers.Il2Cpp;
+#endif
 
 namespace MelonLoader.Bootstrap.RuntimeHandlers.Dotnet;
 
@@ -9,6 +13,14 @@ internal static class DotnetHandler
     private const string _rootKey = "DOTNET_ROOT";
     private static DotnetLib? _module;
     private static Action? _startFunc;
+
+#if ANDROID
+    internal static ClrMonoLib? MonoLib { get; private set; }
+
+    // Kept alive for as long as native code may call them
+    private static readonly ClrMonoLib.CheckThreadFn MonoCheckThreadDelegate = Il2CppHandler.MonoCheckThread;
+    private static readonly ClrMonoLib.UnhandledExceptionFn MonoUnhandledExceptionDelegate = MonoUnhandledException;
+#endif
     
     public static void Initialize()
     {
@@ -28,6 +40,24 @@ internal static class DotnetHandler
             return;
         }
         
+#if ANDROID
+        // The installer bundles a .NET runtime for linux-bionic in the APK, which AndroidBootstrap extracts.
+        // MelonLoader targets net6 while that runtime is newer, so allow rolling forward to it.
+        LibcNative.Setenv("DOTNET_ROLL_FORWARD", "Major", true);
+        if (LoaderConfig.Current.Loader.DebugMode)
+        {
+            LibcNative.Setenv("COREHOST_TRACE", "1", true);
+            LibcNative.Setenv("COREHOST_TRACE_VERBOSITY", "3", true);
+        }
+
+        MelonDebug.Log($"Attempting to load hostfxr using .NET runtime from: {AndroidBootstrap.DotnetDir}");
+        if (ScanDirectory(AndroidBootstrap.DotnetDir)
+            && InitializeDomain(runtimeConfigPath, nativeHostPath))
+            return;
+
+        Core.Logger.Error($"Failed to load the .NET runtime from '{AndroidBootstrap.DotnetDir}'");
+        return;
+#else
         // Try to use a portable runtime from config
         string portableDir = LoaderConfig.Current.Loader.HostFXRPathOverride;
         if (!string.IsNullOrEmpty(portableDir)
@@ -106,6 +136,7 @@ internal static class DotnetHandler
         
         // Failure
         Core.Logger.Error("Failed to load Hostfxr");
+#endif
     }
 
     private static bool InitializeDomain(string runtimeConfigPath, string nativeHostPath)
@@ -127,6 +158,10 @@ internal static class DotnetHandler
 
         var startFuncPtr = Exports.LibraryHandle;
 
+#if ANDROID
+        ApplyMonoPatches();
+#endif
+
         MelonDebug.Log("Invoking NativeHost entry");
         initialize(ref startFuncPtr);
 
@@ -140,6 +175,39 @@ internal static class DotnetHandler
         return true;
     }
     
+#if ANDROID
+    private static void ApplyMonoPatches()
+    {
+        MonoLib = ClrMonoLib.TryLoad();
+        if (MonoLib == null)
+        {
+            Core.Logger.Warning("Could not load the .NET runtime library to apply Mono patches");
+            return;
+        }
+
+        MonoLib.TraceSetLevelString?.Invoke("warning");
+        MonoLib.TraceSetMaskString?.Invoke("all");
+
+        MonoLib.InstallUnhandledExceptionHook?.Invoke(Marshal.GetFunctionPointerForDelegate(MonoUnhandledExceptionDelegate), 0);
+
+        if (MonoLib.SetThreadChecker != null)
+        {
+            MonoLib.SetThreadChecker(Marshal.GetFunctionPointerForDelegate(MonoCheckThreadDelegate));
+            MelonDebug.Log("Installed Mono GC thread checker");
+        }
+        else
+        {
+            Core.Logger.Warning("This .NET runtime has no LemonLoader GC patch; the game may freeze during garbage collection");
+        }
+    }
+
+    private static void MonoUnhandledException(nint exc, nint userData)
+    {
+        if (exc != 0)
+            MonoLib?.PrintUnhandledException?.Invoke(exc);
+    }
+#endif
+
     public static void Start()
     {
         _startFunc?.Invoke();
@@ -182,6 +250,10 @@ internal static class DotnetHandler
         {
             // Temporarily Apply New Root
             Environment.SetEnvironmentVariable(_rootKey, dotnetPath);
+#if ANDROID
+            // Environment.SetEnvironmentVariable doesn't reach native getenv on Unix, which hostfxr uses
+            LibcNative.Setenv(_rootKey, dotnetPath, true);
+#endif
 
             // Temporarily Apply New Path
             string path = originalPath ?? string.Empty;

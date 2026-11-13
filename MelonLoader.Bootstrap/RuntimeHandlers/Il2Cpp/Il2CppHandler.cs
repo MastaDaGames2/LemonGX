@@ -44,6 +44,11 @@ internal static class Il2CppHandler
 
         var domain = il2cpp.Init(a);
 
+#if ANDROID
+        // il2cpp_init attached this thread, so it can be used to learn where il2cpp keeps native thread ids
+        FindThreadIdOffset();
+#endif
+
         DotnetHandler.Initialize();
         il2cppInitDone = true;
 
@@ -63,8 +68,123 @@ internal static class Il2CppHandler
         invokeStarted = true;
         MelonDebug.Log("Invoke hijacked");
 
+#if ANDROID
+        // Threads il2cpp created since startup must be re-checked before the GC can suspend them
+        DotnetHandler.MonoLib?.ThreadSuspendReload?.Invoke();
+#endif
+
         DotnetHandler.Start();
 
         return result;
     }
+
+#if ANDROID
+    /// <summary>
+    /// On Android libil2cpp.so is loaded before libunity and its exports are detoured in place, which works no matter
+    /// how libunity resolves them.
+    /// </summary>
+    internal static bool AttachAndroidHooks()
+    {
+        if (!NativeLibrary.TryLoad("libil2cpp.so", out var handle))
+        {
+            Core.Logger.Error("Could not load libil2cpp.so. Only il2cpp games are supported on Android");
+            return false;
+        }
+
+        Initialize(handle);
+        if (il2cpp == null)
+            return false;
+
+        try
+        {
+            var initPtr = NativeLibrary.GetExport(handle, "il2cpp_init");
+            var invokePtr = NativeLibrary.GetExport(handle, "il2cpp_runtime_invoke");
+
+            var initOriginal = Dobby.HookAttach(initPtr, Marshal.GetFunctionPointerForDelegate(Il2CPPInitDetourFn));
+            il2cpp.Init = Marshal.GetDelegateForFunctionPointer<Il2CppLib.InitFn>(initOriginal);
+
+            var invokeOriginal = Dobby.HookAttach(invokePtr, Marshal.GetFunctionPointerForDelegate(InvokeDetourFn));
+            il2cpp.RuntimeInvoke = Marshal.GetDelegateForFunctionPointer<Il2CppLib.RuntimeInvokeFn>(invokeOriginal);
+        }
+        catch (Exception ex)
+        {
+            Core.Logger.Error($"Failed to hook il2cpp: {ex}");
+            return false;
+        }
+
+        MelonDebug.Log("Hooked il2cpp_init and il2cpp_runtime_invoke");
+        return true;
+    }
+
+    private static int threadIdOffset = -1;
+
+    // Il2CppThread { Il2CppObject obj (2 pointers); Il2CppInternalThread* internal_thread; ... }
+    private const int InternalThreadFieldOffset = 2 * 8;
+
+    // Il2CppInternalThread's layout changes between Unity versions, so instead of hardcoding where its `tid`
+    // (the pthread_t of the thread) lives, find the field holding the current thread's pthread_t.
+    private static unsafe void FindThreadIdOffset()
+    {
+        if (il2cpp.ThreadCurrent == null)
+            return;
+
+        try
+        {
+            var thread = il2cpp.ThreadCurrent();
+            if (thread == 0)
+                return;
+
+            var internalThread = *(nint*)(thread + InternalThreadFieldOffset);
+            if (internalThread == 0)
+                return;
+
+            var self = (ulong)LibcNative.PthreadSelf();
+            for (var offset = 2 * 8; offset < 0x100; offset += 8)
+            {
+                if (*(ulong*)(internalThread + offset) != self)
+                    continue;
+
+                threadIdOffset = offset;
+                MelonDebug.Log($"Il2CppInternalThread tid offset: 0x{offset:X}");
+                return;
+            }
+        }
+        catch (Exception ex)
+        {
+            Core.Logger.Warning($"Could not locate il2cpp thread ids: {ex.Message}");
+        }
+
+        Core.Logger.Warning("Could not locate il2cpp thread ids; the GC may suspend il2cpp threads");
+    }
+
+    /// <summary>
+    /// Called by the Mono GC before it suspends a thread. Threads attached to il2cpp must keep running, or both
+    /// runtimes can deadlock. Returns 0 to skip the thread.
+    /// </summary>
+    internal static unsafe int MonoCheckThread(ulong threadId)
+    {
+        if (threadIdOffset < 0 || il2cpp.GetAllAttachedThreads == null)
+            return 1;
+
+        var threads = il2cpp.GetAllAttachedThreads(out var size);
+        if (threads == 0)
+            return 1;
+
+        for (nuint i = 0; i < size; i++)
+        {
+            var thread = ((nint*)threads)[i];
+            if (thread == 0)
+                continue;
+
+            var internalThread = *(nint*)(thread + InternalThreadFieldOffset);
+            if (internalThread == 0)
+                continue;
+
+            if (*(ulong*)(internalThread + threadIdOffset) == threadId)
+                return 0;
+        }
+
+        return 1;
+    }
+#endif
 }

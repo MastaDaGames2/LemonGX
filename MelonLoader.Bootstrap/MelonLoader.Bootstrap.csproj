@@ -16,10 +16,21 @@
         <DllMainUseQueueUserApc>true</DllMainUseQueueUserApc>
     </PropertyGroup>
 
-    <PropertyGroup Condition="'$(RuntimeIdentifier.StartsWith(`linux-`))' == 'true'">
+    <PropertyGroup Condition="'$(RuntimeIdentifier.StartsWith(`linux-`))' == 'true' And '$(IsAndroidBuild)' != 'true'">
         <ExportsFile>linuxexports.def</ExportsFile>
         <LinkStandardCPlusPlusLibrary>true</LinkStandardCPlusPlusLibrary>
     </PropertyGroup>
+
+    <!-- Android: NativeAOT for linux-bionic, linked with the Android NDK (see BionicNativeAot.targets).
+         The output replaces the game's libmain.so. -->
+    <PropertyGroup Condition="'$(IsAndroidBuild)' == 'true'">
+        <ExportsFile>androidexports.def</ExportsFile>
+        <DisableUnsupportedError>true</DisableUnsupportedError>
+        <PublishAotUsingRuntimePack>true</PublishAotUsingRuntimePack>
+        <!-- Android has no system .NET install to locate, so libnethost isn't needed -->
+        <SkipAppHostLink>true</SkipAppHostLink>
+    </PropertyGroup>
+    <Import Condition="'$(IsAndroidBuild)' == 'true'" Project="BionicNativeAot.targets" />
 
     <PropertyGroup Condition="'$(RuntimeIdentifier.StartsWith(`osx-`))' == 'true'">
         <ExportsFile>osxexports.def</ExportsFile>
@@ -92,7 +103,7 @@
 
     <ItemGroup>
         <PackageReference Include="PublishAotCrossXWin" Version="1.2.0" PrivateAssets="all" />
-        <PackageReference Include="Microsoft.NETCore.DotNetAppHost" Version="$(AppHostVersion)" PrivateAssets="All" />
+        <PackageReference Include="Microsoft.NETCore.DotNetAppHost" Version="$(AppHostVersion)" PrivateAssets="All" Condition="'$(SkipAppHostLink)' != 'true'" />
         <PackageReference Include="NativeDllMain" Version="1.0.0" PrivateAssets="all" />
         <PackageReference Include="Pastel" Version="$(PastelVersion)" />
         <PackageReference Include="Samboy063.Tomlet" Version="$(TomletVersion)" />
@@ -100,6 +111,8 @@
 
     <ItemGroup>
         <Compile Include="$(SolutionDir)/MelonLoader/LoaderConfig.cs" />
+        <Compile Include="$(SolutionDir)/MelonLoader/JNI/*.cs" Link="JNI/%(Filename)%(Extension)" Condition="'$(IsAndroidBuild)' == 'true'" />
+        <Compile Include="$(SolutionDir)/MelonLoader/Utils/APKAssetManager.cs" Link="Proxy/Android/%(Filename)%(Extension)" Condition="'$(IsAndroidBuild)' == 'true'" />
     </ItemGroup>
 
     <ItemGroup Condition="'$(RuntimeIdentifier.StartsWith(`osx-`))' == 'true'">
@@ -107,7 +120,7 @@
     </ItemGroup>
 
     <ItemGroup>
-        <NativeLibrary Include="$(AppHostPath)" />
+        <NativeLibrary Include="$(AppHostPath)" Condition="'$(SkipAppHostLink)' != 'true'" />
         <NativeLibrary Include="Deps/$(RuntimeIdentifier)/$(LibPrefix)dobby$(LibExt)" />
         <NativeLibrary Include="Deps/$(RuntimeIdentifier)/$(LibPrefix)plthook$(LibExt)" />
     </ItemGroup>
@@ -133,6 +146,10 @@
         <MSBuild Projects="$(MSBuildProjectFile)"
              Targets="Publish"
              Properties="Configuration=$(Configuration);PublishDir=$(PublishDir);SkipPublishAfterBuild=true" />
+    </Target>
+
+    <Target Condition="'$(IsAndroidBuild)' == 'true'" Name="RenameAndroidBinary" AfterTargets="Publish">
+        <Move SourceFiles="$(PublishDir)$(TargetName).so" DestinationFiles="$(MLOutDir)/libmain.so" Condition="Exists('$(PublishDir)$(TargetName).so')" />
     </Target>
 
     <Target Condition="'$(RuntimeIdentifier.StartsWith(`win-`))' == 'true'" Name="RenameBinary" AfterTargets="Build">

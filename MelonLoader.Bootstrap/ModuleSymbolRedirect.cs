@@ -10,7 +10,7 @@ namespace MelonLoader.Bootstrap
     {
         private static bool _runtimeInitialised;
 
-#if LINUX || OSX
+#if LINUX || OSX || ANDROID
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
 #endif
 #if WINDOWS
@@ -25,7 +25,12 @@ namespace MelonLoader.Bootstrap
 
             IntPtr detourPtr = Marshal.GetFunctionPointerForDelegate(DetourDelegate);
 
-#if OSX
+#if ANDROID
+            // Unity on Android loads il2cpp itself; hook its exports directly instead of redirecting libunity's lookups
+            if (Il2CppHandler.AttachAndroidHooks())
+                MelonDebug.Log("Symbol Redirect Attached!");
+            return;
+#elif OSX
             // plthook cannot patch UnityPlayer.dylib's GOT on modern macOS
             // (LC_DYLD_CHAINED_FIXUPS) -- it reports "no such function" and the
             // mono hook never installs. Interpose dlsym in native code instead

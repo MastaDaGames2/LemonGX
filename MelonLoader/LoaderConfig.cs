@@ -41,6 +41,9 @@ public class LoaderConfig
 
 #if OSX
         baseDir = GetParentDirectory(baseDir, 3);
+#elif ANDROID
+        // Shared storage, so mods and logs can be managed with a file manager: /storage/emulated/0/MelonLoader/<package>
+        baseDir = MelonLoader.Bootstrap.Proxy.Android.AndroidBootstrap.BaseDir;
 #endif
 
         if (Directory.Exists(customBaseDir))

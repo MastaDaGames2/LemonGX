@@ -23,6 +23,10 @@ public static class Core
         if (LoaderConfig.Current.Loader.Disable)
             return;
 
+#if ANDROID
+        // Console output goes to logcat, which doesn't understand ANSI colors
+        Pastel.ConsoleExtensions.Disable();
+#endif
         MelonLogger.Init();
         if (!LoaderConfig.Current.Loader.CapturePlayerLogs)
             ConsoleHandler.NullHandles();

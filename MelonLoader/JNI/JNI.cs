@@ -106,6 +106,33 @@ public unsafe static partial class JNI
         }
     }
 
+    /// <summary>
+    /// Like <see cref="FindClass"/>, but returns null instead of leaving a pending ClassNotFoundException.
+    /// </summary>
+    public static JClass? TryFindClass(string name)
+    {
+        unsafe
+        {
+            if (ClassCache.TryGetValue(name, out JClass? found))
+                return found;
+
+            IntPtr nameAnsi = Marshal.StringToHGlobalAnsi(name);
+            IntPtr res = Env->Functions->FindClass(Env, nameAnsi);
+            Marshal.FreeHGlobal(nameAnsi);
+
+            if (res == IntPtr.Zero || ExceptionCheck())
+            {
+                ExceptionClear();
+                return null;
+            }
+
+            using JClass local = new() { Handle = res, ReferenceType = JNI.ReferenceType.Local };
+            JClass global = NewGlobalRef<JClass>(local);
+            ClassCache.Add(name, global);
+            return global;
+        }
+    }
+
     public static JMethodID FromReflectedMethod(JObject method)
     {
         unsafe

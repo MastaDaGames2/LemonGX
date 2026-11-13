@@ -133,15 +133,45 @@ public static class APKAssetManager
         if (assetManager?.Valid() ?? false)
             return;
 
-        using JClass unityClass = JNI.FindClass("com/unity3d/player/UnityPlayer");
-        JFieldID activityFieldId = JNI.GetStaticFieldID(unityClass, "currentActivity", "Landroid/app/Activity;");
-        using JObject currentActivityObj = JNI.GetStaticObjectField<JObject>(unityClass, activityFieldId);
-        using JClass activityClass = JNI.GetObjectClass(currentActivityObj);
-        JObject assetManagerObj = JNI.CallObjectMethod<JObject>(currentActivityObj, JNI.GetMethodID(activityClass, "getAssets", "()Landroid/content/res/AssetManager;"));
+        using JObject context = GetContext();
+        if (context == null)
+            throw new Exception("[APKAssetManager] Could not get an Android Context to read the APK's assets");
+
+        using JClass contextClass = JNI.GetObjectClass(context);
+        // JNI wrapper returns global references, so this stays valid across threads and calls
+        assetManager = JNI.CallObjectMethod<JObject>(context, JNI.GetMethodID(contextClass, "getAssets", "()Landroid/content/res/AssetManager;"));
 
         HandleException();
+    }
 
-        assetManager = assetManagerObj;
+    /// <summary>
+    /// Gets the game's Context: Unity's current Activity when it's set, otherwise the Application.
+    /// The caller owns the returned reference.
+    /// </summary>
+    public static JObject GetContext()
+    {
+        JClass unityClass = JNI.TryFindClass("com/unity3d/player/UnityPlayer");
+        if (unityClass != null)
+        {
+            JFieldID activityFieldId = JNI.GetStaticFieldID(unityClass, "currentActivity", "Landroid/app/Activity;");
+            HandleException();
+            if (activityFieldId.Handle != IntPtr.Zero)
+            {
+                JObject activity = JNI.GetStaticObjectField<JObject>(unityClass, activityFieldId);
+                HandleException();
+                if (activity != null && activity.Valid())
+                    return activity;
+            }
+        }
+
+        // currentActivity is only set once UnityPlayer is constructed; the Application exists before that
+        JClass activityThread = JNI.TryFindClass("android/app/ActivityThread");
+        if (activityThread == null)
+            return null;
+
+        JObject application = JNI.CallStaticObjectMethod<JObject>(activityThread, JNI.GetStaticMethodID(activityThread, "currentApplication", "()Landroid/app/Application;"));
+        HandleException();
+        return application != null && application.Valid() ? application : null;
     }
 
     public class APKAssetStream : Stream, IDisposable

@@ -10,8 +10,8 @@
         MonoGetDomainPtr;
         MonoGetRuntimeHandle;
         IsConsoleOpen;
-        GetLoaderConfig;
         GetJavaVM;
+        GetLoaderConfig;
         JNI_OnLoad;
     local: *;
 };

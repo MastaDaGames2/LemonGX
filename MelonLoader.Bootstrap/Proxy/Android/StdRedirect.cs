@@ -1,73 +1,61 @@
 ﻿#if ANDROID
 using System.Runtime.InteropServices;
-using System.Text;
+using Microsoft.Win32.SafeHandles;
 
 namespace MelonLoader.Bootstrap.Proxy.Android;
 
+/// <summary>
+/// Android throws away anything written to stdout/stderr. This pipes both into logcat, which also makes
+/// Console output from the bootstrap and diagnostics from the .NET runtime visible there.
+/// </summary>
 internal static class StdRedirect
 {
-    private const int STDERR_FILENO = 2;
-    private const int STDOUT_FILENO = 1;
+    private const int StdoutFileno = 1;
+    private const int StderrFileno = 2;
+    private const int AndroidLogDebug = 3;
+    private const int AndroidLogWarn = 5;
 
-    [DllImport("libc.so", SetLastError = true)]
-    private static extern int pipe(int[] pipefd);
+    [DllImport("libc", SetLastError = true)]
+    private static extern unsafe int pipe(int* pipefd);
 
-    [DllImport("libc.so", SetLastError = true)]
+    [DllImport("libc", SetLastError = true)]
     private static extern int dup2(int oldfd, int newfd);
 
-    [DllImport("libc.so", SetLastError = true)]
-    private static extern IntPtr fdopen(int fd, string mode);
+    [DllImport("liblog", EntryPoint = "__android_log_write")]
+    private static extern int AndroidLogWrite(int prio, [MarshalAs(UnmanagedType.LPUTF8Str)] string tag, [MarshalAs(UnmanagedType.LPUTF8Str)] string text);
 
-    [DllImport("libc.so", SetLastError = true)]
-    private static extern IntPtr fgets(byte[] buffer, int size, IntPtr stream);
+    public static void RedirectStdOut() => RedirectStream(StdoutFileno, AndroidLogDebug);
 
-    [DllImport("liblog.so", SetLastError = true)]
-    private static extern int __android_log_write(int prio, string tag, string text);
+    public static void RedirectStdErr() => RedirectStream(StderrFileno, AndroidLogWarn);
 
-    public static void RedirectStdErr()
+    private static unsafe void RedirectStream(int fileno, int priority)
     {
-        Environment.SetEnvironmentVariable("COREHOST_TRACE", "1");
-        Environment.SetEnvironmentVariable("COREHOST_TRACE_VERBOSITY", "3");
-
-        RedirectStream(STDERR_FILENO, "MelonLoader");
-    }
-
-    public static void RedirectStdOut()
-    {
-        Environment.SetEnvironmentVariable("COREHOST_TRACE", "1");
-        Environment.SetEnvironmentVariable("COREHOST_TRACE_VERBOSITY", "3");
-
-        RedirectStream(STDOUT_FILENO, "MelonLoader");
-    }
-
-    private static void RedirectStream(int fileno, string tag)
-    {
-        int[] pipes = new int[2];
-        if (pipe(pipes) != 0)
+        var fds = stackalloc int[2];
+        if (pipe(fds) != 0)
         {
-            Console.WriteLine("Failed to create pipe");
+            AndroidProxy.LogError($"Failed to create a pipe for fd {fileno}");
             return;
         }
 
-        dup2(pipes[1], fileno);
-        IntPtr inputFile = fdopen(pipes[0], "r");
-
-        Thread logThread = new Thread(() =>
+        if (dup2(fds[1], fileno) < 0)
         {
-            byte[] buffer = new byte[512];
-            while (true)
-            {
-                IntPtr result = fgets(buffer, buffer.Length, inputFile);
-                if (result == IntPtr.Zero)
-                    break;
+            AndroidProxy.LogError($"Failed to redirect fd {fileno}");
+            return;
+        }
 
-                string logMsg = Encoding.UTF8.GetString(buffer).TrimEnd('\0', '\n', '\r');
-                __android_log_write(3, tag, logMsg); // debug
-            }
-        });
-
-        logThread.IsBackground = true;
-        logThread.Start();
+        var readFd = fds[0];
+        var thread = new Thread(() =>
+        {
+            using var stream = new FileStream(new SafeFileHandle(readFd, true), FileAccess.Read, 1);
+            using var reader = new StreamReader(stream);
+            while (reader.ReadLine() is { } line)
+                AndroidLogWrite(priority, "MelonLoader", line);
+        })
+        {
+            IsBackground = true,
+            Name = $"MelonLoader fd{fileno} logcat"
+        };
+        thread.Start();
     }
 }
 #endif

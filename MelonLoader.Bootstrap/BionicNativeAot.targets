@@ -1,69 +1,46 @@
-<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
-
+<Project>
+    <!--
+        NativeAOT for Android (linux-bionic), linked with the Android NDK's clang.
+        Requires the ANDROID_NDK_ROOT environment variable (or -p:ANDROID_NDK_ROOT=...), NDK r26 or newer.
+    -->
     <PropertyGroup>
-        <!--This is needed in order to build successfully bionic binaries-->
-        <IsAndroid>$(RuntimeIdentifier.ToLower().StartsWith('android'))</IsAndroid>
-        <IsAndroid Condition="'$(IsAndroid)'=='false'">$(RuntimeIdentifier.ToLower().StartsWith('linux-bionic'))</IsAndroid>
-        <IsWindowsHost>$([MSBuild]::IsOSPlatform('Windows'))</IsWindowsHost>
-        <IsLinuxHost>$([MSBuild]::IsOSPlatform('Linux'))</IsLinuxHost>
-        <IsOSXHost>$([MSBuild]::IsOSPlatform('OSX'))</IsOSXHost>
-        <RemoveSections Condition="'$(RemoveSections)' != '' And $([System.String]::ToLower('$(RemoveSections)')) != 'false'">true</RemoveSections>
+        <AndroidApiLevel Condition="'$(AndroidApiLevel)' == ''">24</AndroidApiLevel>
+        <NdkHost Condition="$([MSBuild]::IsOSPlatform('Windows'))">windows-x86_64</NdkHost>
+        <NdkHost Condition="$([MSBuild]::IsOSPlatform('Linux'))">linux-x86_64</NdkHost>
+        <NdkHost Condition="$([MSBuild]::IsOSPlatform('OSX'))">darwin-x86_64</NdkHost>
+        <NdkExeSuffix Condition="$([MSBuild]::IsOSPlatform('Windows'))">.exe</NdkExeSuffix>
+        <NdkBin>$([MSBuild]::EnsureTrailingSlash('$(ANDROID_NDK_ROOT)'))toolchains/llvm/prebuilt/$(NdkHost)/bin/</NdkBin>
+        <NdkTarget Condition="$(RuntimeIdentifier.EndsWith('-arm64'))">aarch64-linux-android$(AndroidApiLevel)</NdkTarget>
+        <NdkTarget Condition="$(RuntimeIdentifier.EndsWith('-x64'))">x86_64-linux-android$(AndroidApiLevel)</NdkTarget>
+
+        <!-- The NDK's per-target clang wrappers. ILCompiler looks the linker up on PATH, so the NDK's bin folder
+             must be on PATH (build-android scripts do this). -->
+        <CppCompilerAndLinker>$(NdkTarget)-clang</CppCompilerAndLinker>
+        <CppCompilerAndLinker Condition="$([MSBuild]::IsOSPlatform('Windows'))">$(NdkTarget)-clang.cmd</CppCompilerAndLinker>
+        <ObjCopyName>llvm-objcopy</ObjCopyName>
+        <!-- The NDK sysroot is found by clang from the target triple -->
+        <SysRoot>$([MSBuild]::EnsureTrailingSlash('$(ANDROID_NDK_ROOT)'))toolchains/llvm/prebuilt/$(NdkHost)/sysroot</SysRoot>
     </PropertyGroup>
 
-    <!--Following blocks are exclusive for NKD building-->
-    <PropertyGroup Condition="$(IsAndroid) == 'true'">
-        <NdkPropertiesFile>$(ANDROID_NDK_ROOT)\source.properties</NdkPropertiesFile>
-        <NdkHost Condition="$(IsWindowsHost) == 'true'">windows-x86_64</NdkHost>
-        <NdkHost Condition="$(IsLinuxHost) == 'true'">linux-x86_64</NdkHost>
-        <NdkHost Condition="$(IsOSXHost) == 'true'">darwin-x86_64</NdkHost>
-        <SysRoot Condition="'$(SysRoot)' == ''">$(ANDROID_NDK_ROOT)/toolchains/llvm/prebuilt/$(NdkHost)/sysroot</SysRoot>
-        <!--Retrieves NDK version-->
-        <BaseRevision>$([System.IO.File]::ReadAllText('$(NdkPropertiesFile)'))</BaseRevision>
-        <NdkVersion>$([System.Text.RegularExpressions.Regex]::Match('$(BaseRevision)', 'Pkg.BaseRevision\s*=\s*(\S+)').Groups[1].Value.Split('.')[0])</NdkVersion>
-        <NdkVersion Condition="'$(NdkVersion)' == ''">0</NdkVersion>
-    </PropertyGroup>
-
-    <PropertyGroup Condition="$(IsAndroid) == 'true'">
-        <!--OSX and Linux can use NDK directly-->
-        <CppCompilerAndLinker Condition="$(IsWindowsHost) != 'true'">$(ANDROID_NDK_ROOT)/toolchains/llvm/prebuilt/$(NdkHost)/bin/clang</CppCompilerAndLinker>
-        <ObjCopyName Condition="$(IsWindowsHost) != 'true'">$(ANDROID_NDK_ROOT)/toolchains/llvm/prebuilt/$(NdkHost)/bin/llvm-objcopy</ObjCopyName>
-        <!--Windows should use batch files to work with NDK-->
-        <CppCompilerAndLinker Condition="$(IsWindowsHost) == 'true'">android_clang.cmd</CppCompilerAndLinker>
-        <ObjCopyName Condition="$(IsWindowsHost) == 'true'">android_llvm-objcopy.cmd</ObjCopyName>
-    </PropertyGroup>
-
-    <ItemGroup Condition="$(IsAndroid) == 'true'">
-        <!--JNI libs needs to be compiled with -z noexecstack-->
-        <LinkerArg Include="-z noexecstack"/>
-        <!--Hack for passing a valid target argument on NDK linker invocation-->
-        <LinkerArg Condition="$(RuntimeIdentifier.ToLower().EndsWith('-x64'))" Include="--target=x86_64-linux-android21"/>
-        <LinkerArg Condition="$(RuntimeIdentifier.ToLower().EndsWith('-arm64'))" Include="--target=aarch64-linux-android21"/>
+    <ItemGroup>
+        <LinkerArg Include="--target=$(NdkTarget)" />
+        <!-- Required for libraries loaded through System.loadLibrary -->
+        <LinkerArg Include="-Wl,-z,noexecstack" />
+        <!-- Android 15+ devices may use 16 KB pages -->
+        <LinkerArg Include="-Wl,-z,max-page-size=16384" />
+        <!-- Dobby is C++; Android has no shared libstdc++, so link the NDK's libc++ statically -->
+        <LinkerArg Include="-static-libstdc++" />
     </ItemGroup>
 
-    <!--Hack for using NDK executables on Windows-->
-    <Target Condition="$(IsAndroid) == 'true'" Name="PrepareNdkBatches" AfterTargets="Build" BeforeTargets="IlcCompile">
-        <PropertyGroup>
-            <NdkHostBin Condition="$(IsWindowsHost) == 'true'">$(ANDROID_NDK_ROOT)\toolchains\llvm\prebuilt\$(NdkHost)\bin\</NdkHostBin>
-            <NdkHostBin Condition="$(IsWindowsHost) != 'true'">$(ANDROID_NDK_ROOT)/toolchains/llvm/prebuilt/$(NdkHost)/bin/</NdkHostBin>
-        </PropertyGroup>
-        <!--Create Windows .cmd files-->
-        <WriteLinesToFile Condition="$(IsWindowsHost) == 'true'" File="android_clang.cmd" Lines="&quot;$(NdkHostBin)clang.exe&quot; %*" Overwrite="true"/>
-        <WriteLinesToFile Condition="$(IsWindowsHost) == 'true'" File="android_llvm-objcopy.cmd" Lines="&quot;$(NdkHostBin)llvm-objcopy.exe&quot; %*" Overwrite="true"/>
-    </Target>
-    <Target Condition="$(IsAndroid) == 'true'" Name="RemoveBatchFiles" AfterTargets="LinkNative">
-        <!--Remove batch files-->
-        <ItemGroup>
-            <BatchFiles Condition="$(IsWindowsHost) == 'true'" Include="android_clang.cmd"/>
-            <BatchFiles Condition="$(IsWindowsHost) == 'true'" Include="android_llvm-objcopy.cmd"/>
-        </ItemGroup>
-        <Delete Files="@(BatchFiles)"/>
+    <Target Name="CheckAndroidNdk" BeforeTargets="SetupOSSpecificProps">
+        <Error Condition="'$(ANDROID_NDK_ROOT)' == '' Or !Exists('$(NdkBin)clang$(NdkExeSuffix)')"
+               Text="Building for Android needs the Android NDK. Set ANDROID_NDK_ROOT to its folder (expected clang at '$(NdkBin)clang$(NdkExeSuffix)')." />
     </Target>
 
-    <!--Hack for removing _init and _fini sections into the exports file-->
-    <Target Name="RemoveSections" Condition="$(IsAndroid) == 'true'" AfterTargets="IlcCompile" BeforeTargets="LinkNative">
-        <PropertyGroup Condition="$(RemoveSections) != 'true'">
-            <RemoveSections Condition="$([System.Int32]::Parse($(NdkVersion.Split('.')[0]))) >= 26">true</RemoveSections>
-        </PropertyGroup>
-        <WriteLinesToFile Condition="$(RemoveSections) == 'true'" File="$(ExportsFile)" Lines="$([System.IO.File]::ReadAllText($(ExportsFile)).Replace('global: _init; _fini;','global: '))" Overwrite="true"/>
+    <!-- Newer NDK linkers reject _init/_fini in version scripts -->
+    <Target Name="RemoveInitFiniExports" AfterTargets="IlcCompile" BeforeTargets="LinkNative">
+        <WriteLinesToFile File="$(ExportsFile)"
+                          Lines="$([System.IO.File]::ReadAllText($(ExportsFile)).Replace('global: _init; _fini;','global: '))"
+                          Overwrite="true" />
     </Target>
 </Project>

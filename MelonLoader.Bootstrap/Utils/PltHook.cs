@@ -1,3 +1,4 @@
+#if !ANDROID
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
@@ -148,3 +149,4 @@ internal static partial class PltHook
         return true;
     }
 }
+#endif
