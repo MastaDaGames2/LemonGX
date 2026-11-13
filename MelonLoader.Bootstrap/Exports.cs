@@ -330,6 +330,20 @@ internal static class Exports
     }
 
 #if ANDROID
+    [UnmanagedCallersOnly(EntryPoint = "CreateNativeThunk")]
+    public static nint CreateNativeThunk(nint target)
+    {
+        try
+        {
+            return Proxy.Android.NativeThunks.Create(target);
+        }
+        catch (Exception ex)
+        {
+            Core.Logger.Error($"Failed to create a native thunk: {ex.Message}");
+            return 0;
+        }
+    }
+
     [UnmanagedCallersOnly(EntryPoint = "GetJavaVM")]
     public static nint GetJavaVM()
     {

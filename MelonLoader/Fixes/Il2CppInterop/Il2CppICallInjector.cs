@@ -4,6 +4,7 @@ using MelonLoader.NativeUtils;
 using MonoMod.RuntimeDetour;
 using MonoMod.Utils;
 using System;
+using System.Linq;
 using System.Collections.Generic;
 using System.Reflection;
 using System.Runtime.InteropServices;
@@ -22,6 +23,10 @@ namespace MelonLoader.Fixes.Il2CppInterop
     internal static class Il2CppICallInjector
     {
         private static Dictionary<string, (object, DynamicMethodDefinition, MethodInfo, IntPtr)> _lookup = new();
+#if ANDROID
+        // Delegates whose native wrappers were handed to il2cpp; they must never be collected
+        private static readonly List<Delegate> _keepAlive = new();
+#endif
 
         private delegate IntPtr dil2cpp_resolve_icall(IntPtr signature);
         private static NativeHook<dil2cpp_resolve_icall> il2cpp_resolve_icall_hook;
@@ -279,16 +284,132 @@ namespace MelonLoader.Fixes.Il2CppInterop
             // Return the New Method
 #if ANDROID
             MethodInfo newMethod = trampoline.Generate();
-            var triple = global::MonoMod.Core.Platforms.PlatformTriple.Current;
-            // Keep the method's code from moving for the lifetime of the process
-            triple.PinMethodIfNeeded(newMethod);
-            return (patcher, trampoline, newMethod, triple.Runtime.GetMethodEntryPoint(newMethod));
+            // il2cpp calls this from native code, so it needs a native entry point that switches the thread into
+            // managed mode (a reverse P/Invoke wrapper). The method's raw code address skips that, which the Mono
+            // runtime used on Android aborts on ("Cannot transition thread ... from STATE_BLOCKING"). This is the
+            // same approach Il2CppInterop's Harmony support uses.
+            // Use Il2CppInterop's own delegate type for this icall when there is one: Il2CppInterop turns the pointer
+            // back into a delegate with GetDelegateForFunctionPointer<ThatType>, and Mono hands back the original
+            // delegate for its own wrappers, so the types must match.
+            Delegate nativeCallable = CreateIl2CppInteropICallDelegate(unityShimMethod, newMethod);
+            if (nativeCallable != null)
+            {
+                _keepAlive.Add(nativeCallable);
+                return (patcher, trampoline, newMethod, Marshal.GetFunctionPointerForDelegate(nativeCallable));
+            }
+
+            // No known delegate type (e.g. the caller declares its own). Put a native jump stub in front of the
+            // wrapper so Mono doesn't recognise the pointer and hands every caller a delegate of its own type.
+            var factoryType = DelegateTypeFactory.instance.CreateDelegateType(newMethod, CallingConvention.Cdecl);
+            var genericCallable = newMethod.CreateDelegate(factoryType);
+            _keepAlive.Add(genericCallable);
+            IntPtr wrapper = Marshal.GetFunctionPointerForDelegate(genericCallable);
+            IntPtr thunk = MelonLoader.InternalUtils.BootstrapInterop.Library.CreateNativeThunk(wrapper);
+            return (patcher, trampoline, newMethod, thunk != IntPtr.Zero ? thunk : wrapper);
 #else
             MethodInfo newMethod = trampoline.Generate().Pin();
             return (patcher, trampoline, newMethod, newMethod.GetNativeStart());
 #endif
         }
         
+#if ANDROID
+        // Il2CppInterop generates a nested "<MethodName>Delegate" in the declaring type for every icall it resolves.
+        // The trampoline has the shape of an il2cpp method, which carries an extra trailing MethodInfo* argument
+        // that icalls don't have; when that's the only difference, an adapter with the icall's exact signature
+        // forwards to the trampoline with a null MethodInfo*.
+        private static Delegate CreateIl2CppInteropICallDelegate(MethodInfo unityShimMethod, MethodInfo trampoline)
+        {
+            Type owner = unityShimMethod.DeclaringType;
+            if (owner == null)
+                return null;
+
+            Type[] trampolineParams = trampoline.GetParameters().Select(p => p.ParameterType).ToArray();
+            Type match = null;
+            bool needsAdapter = false;
+            bool passMethodInfo = false;
+            foreach (Type nested in owner.GetNestedTypes(BindingFlags.Public | BindingFlags.NonPublic))
+            {
+                if (!typeof(Delegate).IsAssignableFrom(nested)
+                    || !nested.Name.StartsWith(unityShimMethod.Name, StringComparison.Ordinal))
+                    continue;
+
+                MethodInfo invoke = nested.GetMethod("Invoke");
+                if (invoke == null || !SameNativeShape(invoke.ReturnType, trampoline.ReturnType))
+                    continue;
+
+                Type[] invokeParams = invoke.GetParameters().Select(p => p.ParameterType).ToArray();
+                bool exact = invoke.ReturnType == trampoline.ReturnType && invokeParams.SequenceEqual(trampolineParams);
+                bool sameArgs = invokeParams.Length == trampolineParams.Length
+                                && invokeParams.Zip(trampolineParams).All(t => SameNativeShape(t.First, t.Second));
+                bool withoutMethodInfo = trampolineParams.Length == invokeParams.Length + 1
+                                         && IsPointerLike(trampolineParams[^1])
+                                         && invokeParams.Zip(trampolineParams).All(t => SameNativeShape(t.First, t.Second));
+                if (!exact && !sameArgs && !withoutMethodInfo)
+                    continue;
+
+                bool preferred = nested.Name == unityShimMethod.Name + "Delegate";
+                if (match == null || preferred)
+                {
+                    match = nested;
+                    needsAdapter = !exact;
+                    passMethodInfo = withoutMethodInfo;
+                }
+                if (preferred)
+                    break;
+            }
+
+            if (match == null)
+                return null;
+
+            if (!needsAdapter)
+                return trampoline.CreateDelegate(match);
+
+            // The adapter is bound to a delegate of the trampoline (its first argument), which works whatever kind of
+            // method MonoMod generated
+            Type trampolineDelegateType = DelegateTypeFactory.instance.CreateDelegateType(trampoline, CallingConvention.Cdecl);
+            Delegate trampolineDelegate = trampoline.CreateDelegate(trampolineDelegateType);
+            MethodInfo trampolineInvoke = trampolineDelegateType.GetMethod("Invoke");
+
+            Type[] adapterParams = match.GetMethod("Invoke").GetParameters().Select(p => p.ParameterType).ToArray();
+            var adapter = new System.Reflection.Emit.DynamicMethod($"ICallAdapter_{unityShimMethod.Name}", match.GetMethod("Invoke").ReturnType,
+                new[] { trampolineDelegateType }.Concat(adapterParams).ToArray(), typeof(Il2CppICallInjector).Module, true);
+            var il = adapter.GetILGenerator();
+            il.Emit(System.Reflection.Emit.OpCodes.Ldarg_0);
+            // Arguments are passed through as-is: they only differ in how they're typed (IntPtr vs T&, bool vs byte)
+            for (int i = 0; i < adapterParams.Length; i++)
+                il.Emit(System.Reflection.Emit.OpCodes.Ldarg, i + 1);
+            if (passMethodInfo)
+            {
+                il.Emit(System.Reflection.Emit.OpCodes.Ldc_I4_0);
+                il.Emit(System.Reflection.Emit.OpCodes.Conv_I);
+            }
+            il.Emit(System.Reflection.Emit.OpCodes.Callvirt, trampolineInvoke);
+            il.Emit(System.Reflection.Emit.OpCodes.Ret);
+            _keepAlive.Add(trampolineDelegate);
+            return adapter.CreateDelegate(match, trampolineDelegate);
+        }
+
+        private static bool IsPointerLike(Type t)
+            => t == typeof(IntPtr) || t == typeof(UIntPtr) || t.IsPointer || t.IsByRef;
+
+        // Whether two types are passed the same way in native code
+        private static bool SameNativeShape(Type a, Type b)
+        {
+            if (a == b)
+                return true;
+            if (IsPointerLike(a) && IsPointerLike(b))
+                return true;
+            if (a.IsEnum)
+                a = Enum.GetUnderlyingType(a);
+            if (b.IsEnum)
+                b = Enum.GetUnderlyingType(b);
+            if (a == b)
+                return true;
+            bool OneByte(Type t) => t == typeof(bool) || t == typeof(byte) || t == typeof(sbyte);
+            return OneByte(a) && OneByte(b);
+        }
+#endif
+
         private static string GetMethodSignature(MethodBase method)
         {
             var parameters = method.GetParameters();

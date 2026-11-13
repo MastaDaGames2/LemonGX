@@ -35,4 +35,7 @@ internal delegate void GetLoaderConfigFn(ref LoaderConfig config);
 #if ANDROID
 [UnmanagedFunctionPointer(CallingConvention.Winapi)]
 internal delegate nint GetJavaVM();
+
+[UnmanagedFunctionPointer(CallingConvention.Winapi)]
+internal delegate nint CreateNativeThunkFn(nint target);
 #endif

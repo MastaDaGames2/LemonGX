@@ -10,6 +10,7 @@
         MonoGetDomainPtr;
         MonoGetRuntimeHandle;
         IsConsoleOpen;
+        CreateNativeThunk;
         GetJavaVM;
         GetLoaderConfig;
         JNI_OnLoad;

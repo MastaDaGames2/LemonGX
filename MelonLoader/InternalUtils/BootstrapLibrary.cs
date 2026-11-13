@@ -16,5 +16,6 @@ internal class BootstrapLibrary
     internal GetLoaderConfigFn GetLoaderConfig { get; private set; }
 #if ANDROID
     internal GetJavaVM GetJavaVM { get; private set; }
+    internal CreateNativeThunkFn CreateNativeThunk { get; private set; }
 #endif
 }
