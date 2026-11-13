@@ -1,4 +1,4 @@
-﻿#if ANDROID
+#if ANDROID
 namespace MelonLoader.Java;
 
 using System;
@@ -52,8 +52,8 @@ public unsafe static partial class JNI
                 return;
             }
 
-            IntPtr refPtr = IntPtr.Zero;
-            res = VM->Functions->AttachCurrentThread(VM, out JNIEnv* localEnv, ref refPtr);
+            // args must be a JavaVMAttachArgs* or null
+            res = VM->Functions->AttachCurrentThread(VM, out JNIEnv* localEnv, IntPtr.Zero);
 
             env = localEnv;
         }

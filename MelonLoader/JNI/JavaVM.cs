@@ -1,4 +1,4 @@
-﻿#if ANDROID
+#if ANDROID
 namespace MelonLoader.Java;
 
 using System;
@@ -23,7 +23,7 @@ internal readonly unsafe struct JavaVM
         internal readonly delegate* unmanaged[Stdcall]<JavaVM*, JNI.Result> DestroyJavaVM;
 
         // jint (JNICALL *AttachCurrentThread)(JavaVM *vm, void **penv, void *args);
-        internal readonly delegate* unmanaged[Stdcall]<JavaVM*, out JNIEnv*, ref IntPtr, JNI.Result> AttachCurrentThread;
+        internal readonly delegate* unmanaged[Stdcall]<JavaVM*, out JNIEnv*, IntPtr, JNI.Result> AttachCurrentThread;
 
         // jint (JNICALL *DetachCurrentThread)(JavaVM *vm);
         internal readonly delegate* unmanaged[Stdcall]<JavaVM*, JNI.Result> DetachCurrentThread;

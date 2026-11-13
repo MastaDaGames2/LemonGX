@@ -1,4 +1,4 @@
-﻿#if ANDROID
+#if ANDROID
 using System;
 
 namespace MelonLoader.Java;
@@ -53,10 +53,8 @@ public class JObject : IDisposable
         return this.Handle != IntPtr.Zero;
     }
 
-    ~JObject()
-    {
-        Dispose(disposing: false);
-    }
+    // No finalizer: references may only be released from a thread attached to the JVM, and the .NET finalizer thread
+    // isn't one. Undisposed references stay alive until the process exits, which is harmless for the few we create.
 
     public void Dispose()
     {
