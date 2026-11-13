@@ -1,4 +1,4 @@
-﻿using MelonLoader.Bootstrap.Utils;
+using MelonLoader.Bootstrap.Utils;
 using System;
 using System.Diagnostics;
 using System.IO;
@@ -16,10 +16,19 @@ internal static class Il2CppHandler
 
     private static readonly Il2CppLib.InitFn Il2CPPInitDetourFn = InitDetour;
     private static readonly Il2CppLib.RuntimeInvokeFn InvokeDetourFn = InvokeDetour;
+#if ANDROID
+    private static readonly Il2CppLib.ThreadAttachFn ThreadAttachDetourFn = ThreadAttachDetour;
+    private static readonly Il2CppLib.ThreadDetachFn ThreadDetachDetourFn = ThreadDetachDetour;
+#endif
     internal static readonly Dictionary<string, (Action<nint> InitMethod, IntPtr detourPtr)> SymbolRedirects = new()
     {
         { "il2cpp_init", (Initialize, Marshal.GetFunctionPointerForDelegate(Il2CPPInitDetourFn))},
         { "il2cpp_runtime_invoke", (Initialize, Marshal.GetFunctionPointerForDelegate(InvokeDetourFn))},
+#if ANDROID
+        // Only to learn which threads belong to il2cpp (see MonoCheckThread)
+        { "il2cpp_thread_attach", (Initialize, Marshal.GetFunctionPointerForDelegate(ThreadAttachDetourFn))},
+        { "il2cpp_thread_detach", (Initialize, Marshal.GetFunctionPointerForDelegate(ThreadDetachDetourFn))},
+#endif
     };
 
     public static void Initialize(nint handle)
@@ -47,6 +56,7 @@ internal static class Il2CppHandler
 #if ANDROID
         // il2cpp_init attached this thread, so it can be used to learn where il2cpp keeps native thread ids
         FindThreadIdOffset();
+        RecordIl2CppThread();
 #endif
 
         DotnetHandler.Initialize();
@@ -57,6 +67,9 @@ internal static class Il2CppHandler
 
     internal static nint InvokeDetour(nint method, nint obj, nint args, nint exc)
     {
+#if ANDROID
+        RecordIl2CppThread();
+#endif
         var result = il2cpp.RuntimeInvoke(method, obj, args, exc);
         if (invokeStarted)
             return result;
@@ -157,12 +170,44 @@ internal static class Il2CppHandler
         Core.Logger.Warning("Could not locate il2cpp thread ids; the GC may suspend il2cpp threads");
     }
 
+    // Native ids (pthread_t) of threads attached to il2cpp, for runtimes whose il2cpp can't list them
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<ulong, byte> Il2CppThreads = new();
+
+    [ThreadStatic]
+    private static bool _threadRecorded;
+
+    private static void RecordIl2CppThread()
+    {
+        if (_threadRecorded)
+            return;
+        _threadRecorded = true;
+        Il2CppThreads.TryAdd((ulong)LibcNative.PthreadSelf(), 0);
+    }
+
+    private static nint ThreadAttachDetour(nint domain)
+    {
+        var thread = il2cpp.ThreadAttach!(domain);
+        Il2CppThreads.TryAdd((ulong)LibcNative.PthreadSelf(), 0);
+        return thread;
+    }
+
+    private static void ThreadDetachDetour(nint thread)
+    {
+        Il2CppThreads.TryRemove((ulong)LibcNative.PthreadSelf(), out _);
+        _threadRecorded = false;
+        il2cpp.ThreadDetach!(thread);
+    }
+
     /// <summary>
     /// Called by the Mono GC before it suspends a thread. Threads attached to il2cpp must keep running, or both
     /// runtimes can deadlock. Returns 0 to skip the thread.
     /// </summary>
     internal static unsafe int MonoCheckThread(ulong threadId)
     {
+        if (Il2CppThreads.ContainsKey(threadId))
+            return 0;
+
+        // Unity 6.3+ no longer exports il2cpp_thread_get_all_attached_threads; the threads recorded above cover it
         if (threadIdOffset < 0 || il2cpp.GetAllAttachedThreads == null)
             return 1;
 

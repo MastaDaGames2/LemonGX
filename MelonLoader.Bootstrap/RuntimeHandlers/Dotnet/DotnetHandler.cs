@@ -1,4 +1,4 @@
-﻿using System.Runtime.InteropServices;
+using System.Runtime.InteropServices;
 using System.Text;
 using MelonLoader.Bootstrap.Logging;
 #if ANDROID
@@ -48,6 +48,21 @@ internal static class DotnetHandler
         {
             LibcNative.Setenv("COREHOST_TRACE", "1", true);
             LibcNative.Setenv("COREHOST_TRACE_VERBOSITY", "3", true);
+        }
+
+        // The runtime's Mono VM installs its own SIGSEGV/SIGBUS handlers. Android's Java runtime and Unity rely on
+        // handling some of those signals themselves, so Mono must pass on the ones that aren't its own. This has to
+        // happen before the runtime starts, which is why the library is loaded ahead of hostfxr.
+        MonoLib = ClrMonoLib.TryLoad();
+        if (MonoLib?.SetSignalChaining != null)
+        {
+            MonoLib.SetSignalChaining(1);
+            MonoLib.SetCrashChaining?.Invoke(1);
+            Core.Logger.Msg("Enabled Mono signal chaining");
+        }
+        else
+        {
+            Core.Logger.Warning("Could not enable Mono signal chaining; crashes in game code may be reported as Mono crashes");
         }
 
         MelonDebug.Log($"Attempting to load hostfxr using .NET runtime from: {AndroidBootstrap.DotnetDir}");
@@ -178,7 +193,7 @@ internal static class DotnetHandler
 #if ANDROID
     private static void ApplyMonoPatches()
     {
-        MonoLib = ClrMonoLib.TryLoad();
+        MonoLib ??= ClrMonoLib.TryLoad();
         if (MonoLib == null)
         {
             Core.Logger.Warning("Could not load the .NET runtime library to apply Mono patches");

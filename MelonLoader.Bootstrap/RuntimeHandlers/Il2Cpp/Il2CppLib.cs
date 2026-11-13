@@ -14,6 +14,8 @@ internal class Il2CppLib(Il2CppLib.MethodGetNameFn methodGetName)
 #if ANDROID
     public GetAllAttachedThreadsFn? GetAllAttachedThreads { get; private init; }
     public ThreadCurrentFn? ThreadCurrent { get; private init; }
+    public ThreadAttachFn? ThreadAttach { get; private init; }
+    public ThreadDetachFn? ThreadDetach { get; private init; }
 #endif
 
     public static Il2CppLib? TryLoad(nint hRuntime)
@@ -27,6 +29,8 @@ internal class Il2CppLib(Il2CppLib.MethodGetNameFn methodGetName)
         // Only needed for the Mono GC thread fix, so they're optional
         NativeFunc.GetExport<GetAllAttachedThreadsFn>(hRuntime, "il2cpp_thread_get_all_attached_threads", out var getAllAttachedThreads);
         NativeFunc.GetExport<ThreadCurrentFn>(hRuntime, "il2cpp_thread_current", out var threadCurrent);
+        NativeFunc.GetExport<ThreadAttachFn>(hRuntime, "il2cpp_thread_attach", out var threadAttach);
+        NativeFunc.GetExport<ThreadDetachFn>(hRuntime, "il2cpp_thread_detach", out var threadDetach);
 #endif
 
         return new(methodGetName)
@@ -37,6 +41,8 @@ internal class Il2CppLib(Il2CppLib.MethodGetNameFn methodGetName)
 #if ANDROID
             GetAllAttachedThreads = getAllAttachedThreads,
             ThreadCurrent = threadCurrent,
+            ThreadAttach = threadAttach,
+            ThreadDetach = threadDetach,
 #endif
         };
     }
@@ -57,5 +63,9 @@ internal class Il2CppLib(Il2CppLib.MethodGetNameFn methodGetName)
     public delegate nint GetAllAttachedThreadsFn(out nuint size);
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
     public delegate nint ThreadCurrentFn();
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+    public delegate nint ThreadAttachFn(nint domain);
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+    public delegate void ThreadDetachFn(nint thread);
 #endif
 }

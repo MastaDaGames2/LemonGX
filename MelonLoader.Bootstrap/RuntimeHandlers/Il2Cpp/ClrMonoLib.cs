@@ -1,4 +1,4 @@
-﻿#if ANDROID
+#if ANDROID
 using MelonLoader.Bootstrap.Proxy.Android;
 using MelonLoader.Bootstrap.Utils;
 using System.Runtime.InteropServices;
@@ -19,6 +19,8 @@ internal class ClrMonoLib
     public PrintUnhandledExceptionFn? PrintUnhandledException { get; private init; }
     public SetStringFn? TraceSetLevelString { get; private init; }
     public SetStringFn? TraceSetMaskString { get; private init; }
+    public SetBoolFn? SetSignalChaining { get; private init; }
+    public SetBoolFn? SetCrashChaining { get; private init; }
 
     public static ClrMonoLib? TryLoad()
     {
@@ -41,6 +43,8 @@ internal class ClrMonoLib
         NativeFunc.GetExport<PrintUnhandledExceptionFn>(hRuntime, "mono_print_unhandled_exception", out var printUnhandledException);
         NativeFunc.GetExport<SetStringFn>(hRuntime, "mono_trace_set_level_string", out var setLevelString);
         NativeFunc.GetExport<SetStringFn>(hRuntime, "mono_trace_set_mask_string", out var setMaskString);
+        NativeFunc.GetExport<SetBoolFn>(hRuntime, "mono_set_signal_chaining", out var setSignalChaining);
+        NativeFunc.GetExport<SetBoolFn>(hRuntime, "mono_set_crash_chaining", out var setCrashChaining);
 
         return new()
         {
@@ -50,7 +54,9 @@ internal class ClrMonoLib
             InstallUnhandledExceptionHook = installUnhandledExceptionHook,
             PrintUnhandledException = printUnhandledException,
             TraceSetLevelString = setLevelString,
-            TraceSetMaskString = setMaskString
+            TraceSetMaskString = setMaskString,
+            SetSignalChaining = setSignalChaining,
+            SetCrashChaining = setCrashChaining
         };
     }
 
@@ -70,5 +76,7 @@ internal class ClrMonoLib
     public delegate void PrintUnhandledExceptionFn(nint exc);
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
     public delegate void SetStringFn([MarshalAs(UnmanagedType.LPUTF8Str)] string str);
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+    public delegate void SetBoolFn(int value);
 }
 #endif
