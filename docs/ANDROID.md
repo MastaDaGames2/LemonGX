@@ -1,4 +1,4 @@
-# MelonLoader 0.7.4 on Android (LemonLoader port)
+# Lemon GX: MelonLoader 0.7.4 on Android
 
 This branch ports [LemonLoader](https://github.com/LemonLoader/MelonLoader)'s Android support onto MelonLoader 0.7.4,
 so il2cpp Unity games on 64-bit ARM Android can be modded with the current MelonLoader, including games built
@@ -10,8 +10,8 @@ with Unity 2023.2 and Unity 6 (6000.x).
 | --- | --- | --- |
 | Bootstrap | Rust (`libBootstrap.so`) + Rust `libmain.so` proxy | MelonLoader 0.7.4's C# NativeAOT bootstrap, built for `linux-bionic-arm64` as a single `libmain.so` |
 | Starting point | `NativeLoader.load` proxy loads the bootstrap, then libunity | Same idea: `JNI_OnLoad` registers `NativeLoader.load`, starts MelonLoader, then loads libunity |
-| il2cpp hooks | Dobby on `il2cpp_init` | Dobby on `il2cpp_init` and `il2cpp_runtime_invoke` in `libil2cpp.so` |
-| Mono GC thread fix | Hardcoded `Il2CppInternalThread` layout | `tid` offset found at runtime, so it survives Unity layout changes |
+| il2cpp hooks | Dobby on `il2cpp_init` | libunity's `dlsym` is redirected (plthook), so `il2cpp_init`, `il2cpp_runtime_invoke` and the thread attach/detach exports are swapped without patching code; Dobby is only a fallback |
+| Mono GC thread fix | Hardcoded `Il2CppInternalThread` layout | Not needed: il2cpp code enters managed code through reverse P/Invoke wrappers, so Mono's default hybrid suspend handles it (the old checker can still be enabled with `LEMONGX_MONO_THREAD_CHECKER=1`) |
 | Cpp2IL | 2022.1.0-pre-release.16 (fails on Unity 2023.2 / 6000.0 metadata) | 2022.1.0-pre-release.21, run in-process |
 | Il2CppInterop / HarmonyX / MonoMod | LemonLoader forks | Same forks, as submodules in `External/` |
 | MelonLoader | 0.6.6 | 0.7.4 |
@@ -59,7 +59,7 @@ instead of downloading its own when it finds one here:
 - Android installer: `/sdcard/Download/melon_data.zip`
 
 Put the built zip there and patch the game as usual. The installer also patches the manifest (storage permissions),
-adds `assets/lemon_patch_date.txt`, copies the Unity libraries it needs, and re-signs the APK. Uninstall the
+adds `assets/lemon_patch_date.txt`, and re-signs the APK. It keeps the game's own `libunity.so`. Uninstall the
 original game first (the patched APK has a different signature), and remove any previously patched copy.
 
 On first launch MelonLoader asks for "All files access" (Android 11+), extracts itself and the runtime, and generates
@@ -73,8 +73,8 @@ adb logcat -s MelonLoader
 ## Known limitations
 
 - Only 64-bit ARM (`arm64-v8a`) il2cpp games. No Mono games, no 32-bit ARM.
-- Not yet tested on a device. Everything builds and the produced `libmain.so` was checked (ARM64, exports, only system
-  library dependencies), but the boot path has not been run against a real game yet.
+- Tested on My Dystopian Robot Girlfriend (Unity 6000.3.8f1) on a Samsung Galaxy S25 Ultra (Android 17), with a mod
+  loaded. Other games haven't been tested yet.
 - LemonLoader's prebuilt .NET runtime is aligned for 4 KB pages; devices running with 16 KB pages won't load it.
 - Mods compiled against legacy MonoMod types (`MonoMod.RuntimeDetour.Detour`, `NativeDetour`, ...) won't load,
   because the ARM64 fork is based on the reorganized MonoMod API. Harmony patches work as usual.
