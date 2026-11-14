@@ -73,8 +73,7 @@ adb logcat -s MelonLoader
 ## Known limitations
 
 - Only 64-bit ARM (`arm64-v8a`) il2cpp games. No Mono games, no 32-bit ARM.
-- Tested on My Dystopian Robot Girlfriend (Unity 6000.3.8f1) on a Samsung Galaxy S25 Ultra (Android 17), with a mod
-  loaded. Other games haven't been tested yet.
+- Tested on a game using Unity 6000.3.8f1, with a mod loaded.
 - LemonLoader's prebuilt .NET runtime is aligned for 4 KB pages; devices running with 16 KB pages won't load it.
 - Mods compiled against legacy MonoMod types (`MonoMod.RuntimeDetour.Detour`, `NativeDetour`, ...) won't load,
   because the ARM64 fork is based on the reorganized MonoMod API. Harmony patches work as usual.

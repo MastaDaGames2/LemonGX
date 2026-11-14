@@ -53,8 +53,7 @@ wrong, that log is the first place to look.
 - 64-bit ARM phones (`arm64-v8a`) and **IL2CPP** Unity games. Mono games and 32-bit games aren't supported.
 - Mods that use the old MonoMod detour API (`MonoMod.RuntimeDetour.Detour`, `NativeDetour`) don't load. Harmony
   patches work normally.
-- Tested on: *My Dystopian Robot Girlfriend* (Unity 6000.3.8f1), Samsung Galaxy S25 Ultra, Android 17.
-  Other games should work; please report the ones that don't.
+- Tested on a game using Unity 6000.3.8f1.
 
 ## Building
 
