@@ -9,8 +9,8 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/MastaDaGames2/LemonGX-Installer/releases/latest"><img src="https://img.shields.io/github/v/release/MastaDaGames2/LemonGX-Installer?label=download&style=for-the-badge&color=yellow"></a>
-  <a href="https://github.com/MastaDaGames2/LemonGX-Installer/releases"><img src="https://img.shields.io/github/downloads/MastaDaGames2/LemonGX-Installer/total?label=downloads&style=for-the-badge&color=red"></a>
+  <a href="https://github.com/MastaDaGames2/LemonGX-App/releases/latest"><img src="https://img.shields.io/github/v/release/MastaDaGames2/LemonGX-App?label=download&style=for-the-badge&color=yellow"></a>
+  <a href="https://github.com/MastaDaGames2/LemonGX-App/releases"><img src="https://img.shields.io/github/downloads/MastaDaGames2/LemonGX-App/total?label=downloads&style=for-the-badge&color=red"></a>
 </p>
 
 ---
@@ -30,7 +30,7 @@ current games too.
 
 ## Installing
 
-1. Download **Lemon GX.apk** from the [latest release](https://github.com/MastaDaGames2/LemonGX-Installer/releases/latest)
+1. Download **Lemon GX.apk** from the [latest release](https://github.com/MastaDaGames2/LemonGX-App/releases/latest)
    and install it.
 2. Open Lemon GX, pick a game, and tap **Patch**.
 3. When asked, uninstall the original game and install the patched copy. Your game data is removed along with
@@ -59,7 +59,7 @@ wrong, that log is the first place to look.
 ## Building
 
 See [docs/ANDROID.md](docs/ANDROID.md) for building the loader (`melon_data.zip`), and the
-[Lemon GX Installer](https://github.com/MastaDaGames2/LemonGX-Installer) repo for the app.
+[Lemon GX App](https://github.com/MastaDaGames2/LemonGX-App) repo for the app.
 
 ## Credits
 
